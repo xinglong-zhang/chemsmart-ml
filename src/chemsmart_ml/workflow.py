@@ -36,9 +36,14 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None):
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True):
     if model not in ("linear", "ridge") or not np.isfinite(alpha) or alpha < 0:
         raise ValueError("Invalid model or regularization strength")
+    if plot:
+        try:
+            __import__("matplotlib")  # Check before the expensive database read.
+        except ImportError as exc:
+            raise ValueError('Automatic plotting requires matplotlib; install chemsmart-ml[plot] or use --no-plot') from exc
     model_name = model
     out = Path(output)
     out.mkdir(parents=True, exist_ok=False)
@@ -114,7 +119,7 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     pred = low + design@coef
     model = dict(format_version=1, model=model_name+"-delta", alpha=alpha, target="total_energy", unit="Hartree",
                  elements=elements, electronic=electronic, fingerprint=fingerprint_settings, mean=mean.tolist(), scale=scale.tolist(),
-                 coefficients=coef.tolist(), seed=seed,
+                 coefficients=coef.tolist(), seed=seed, plot=plot,
                  source=str(Path(filename).resolve()), reference=str(Path(reference).resolve()))
     (out/"model.json").write_text(json.dumps(model,indent=2))
     metrics = {s:dict(n=int((labels==s).sum()),mae_hartree=float(np.abs(pred[labels==s]-target[labels==s]).mean())) for s in ("train","valid","test")}
@@ -123,6 +128,9 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
         w=csv.writer(f);w.writerow(["npz_index","split","source_record","reference_record","reference_energy","prediction"])
         for i,(key,a,b) in enumerate(pairs):
             w.writerow([key,labels[i],a["record_id"],b["record_id"],target[i],pred[i]])
+    if plot:
+        from .plotting import plot_results
+        plot_results(out,split='test')
     return metrics
 
 

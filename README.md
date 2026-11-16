@@ -121,7 +121,7 @@ and full training on this exact plugin branch remain separate validation steps.
 
 ## Plot saved training results
 
-Install optional plotting support with `python -m pip install -e '.[plot]'`.
+Matplotlib is installed with the plugin; the `[plot]` extra remains supported.
 On the plugin-capable host:
 
 ```sh
@@ -238,3 +238,12 @@ to its output, checks sample record IDs and preserves grouping based on the full
 paired set before filtering. For a fair feature comparison, train numerical and
 Morgan baselines with the same manifest rather than compare different cohorts.
 Previously failed output directories remain intact; always choose new outputs.
+
+## Automatic plots after training
+
+Training now generates test-set PNG, PDF and error statistics in OUTPUT/plots by
+default. Set `train.plot: false` in project YAML or pass `train --no-plot` to opt
+out. `train --plot` overrides YAML false. The independent plot command remains
+available for older runs or other splits. Automatic plotting uses a headless
+backend and does not open a window. Metrics and model artifacts are written
+before plotting; if plotting fails, those artifacts remain available.

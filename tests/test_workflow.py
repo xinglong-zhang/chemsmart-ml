@@ -136,3 +136,27 @@ def test_orbitals_without_dipole(tmp_path):
     predict(a,tmp_path/'orbitals/model.json',tmp_path/'orbitals.csv')
     counts=json.loads((tmp_path/'orbitals/feature-availability.json').read_text())
     assert counts['finite_counts']['dipole']==0
+
+
+def test_train_automatic_plot_and_opt_out(tmp_path):
+    from click.testing import CliRunner
+    from chemsmart_ml.cli import build_cli,execute
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    train(a,b,tmp_path/'auto')
+    assert (tmp_path/'auto/plots/test-results.png').is_file()
+    assert (tmp_path/'auto/plots/test-results.pdf').is_file()
+    stats=json.loads((tmp_path/'auto/plots/test-statistics.json').read_text())
+    assert stats['n']==json.loads((tmp_path/'auto/metrics.json').read_text())['test']['n']
+    cfg=tmp_path/'project.yaml'
+    cfg.write_text(f'data:\n  filename: {a}\n  reference: {b}\ntrain:\n  pairing: revqm9-index\n  plot: false\n  output: disabled\n')
+    cli=build_cli(execute)
+    result=CliRunner().invoke(cli,['-p',str(cfg),'train'])
+    assert result.exit_code==0,result.output
+    assert not (tmp_path/'disabled/plots').exists()
+    result=CliRunner().invoke(cli,['-p',str(cfg),'train','--plot','-o',str(tmp_path/'override')])
+    assert result.exit_code==0,result.output
+    assert (tmp_path/'override/plots/test-results.png').exists()
+    result=CliRunner().invoke(cli,['-f',str(a),'-r',str(b),'train','--pairing','revqm9-index','--no-plot','-o',str(tmp_path/'no-plot')])
+    assert result.exit_code==0,result.output
+    assert not (tmp_path/'no-plot/plots').exists()

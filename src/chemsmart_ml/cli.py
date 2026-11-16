@@ -25,7 +25,7 @@ def build_cli(dispatch):
                 raise click.UsageError('Project YAML must contain only data/train/predict/prepare mappings')
             allowed = {
                 'data': {'filename', 'reference'},
-                'train': {'target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest'},
+                'train': {'target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest','plot'},
                 'predict': {'model_path','output'},
                 'validate': {'output','features','fingerprint','pairing'},
                 'prepare': {'output','morgan_radius','morgan_size','morgan_chirality','cache','manifest'},
@@ -61,6 +61,7 @@ def build_cli(dispatch):
     @click.option('--pairing',type=click.Choice(['revqm9-index']),required=True,
                   help='xTB idx=N matches NPZ structure_index_in_file=N. Both inputs must share this dataset ordering.')
     @click.option('--features',type=click.Choice(['composition-energy','orbitals','electronic']),default='composition-energy')
+    @click.option('--plot/--no-plot',default=True,show_default=True,help='Generate test-set plots after training.')
     @click.option('--model',type=click.Choice(['linear','ridge']),default='linear',show_default=True)
     @click.option('--alpha',default=1.0,type=click.FloatRange(min=0))
     @click.option('--fingerprint',type=click.Choice(['none','morgan']),default='none')
@@ -72,11 +73,11 @@ def build_cli(dispatch):
     @click.option('--seed',default=42,type=int)
     @click.option('-o','--output',required=True,type=click.Path(resolve_path=True))
     @click.pass_context
-    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest):
+    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot):
         options=dict(ctx.obj['ml_input'])
         if options['reference'] is None:
             raise click.UsageError('Training requires -r/--reference')
-        options.update(output=output,seed=seed,electronic=('orbitals' if features=='orbitals' else features=='electronic'),model=model,alpha=alpha)
+        options.update(output=output,plot=plot,seed=seed,electronic=('orbitals' if features=='orbitals' else features=='electronic'),model=model,alpha=alpha)
         options.update(fingerprint=fingerprint,morgan_radius=morgan_radius,morgan_size=morgan_size,morgan_chirality=morgan_chirality,cache=cache,manifest=manifest)
         return dispatch('train',options)
 
