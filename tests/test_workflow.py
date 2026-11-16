@@ -61,3 +61,27 @@ def test_ridge_roundtrip(tmp_path):
     assert model['model']=='ridge-delta'
     predict(a,tmp_path/'ridge/model.json',tmp_path/'ridge.csv')
     assert len((tmp_path/'ridge.csv').read_text().splitlines())==121
+
+
+def test_yaml_precedence_and_paths(tmp_path):
+    from click.testing import CliRunner
+    from chemsmart_ml.cli import build_cli
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    project=tmp_path/'ml.yaml'
+    project.write_text('data:\n  filename: a.db\n  reference: b.db\ntrain:\n  pairing: revqm9-index\n  model: ridge\n  alpha: 2.0\n  output: run\n')
+    calls=[]
+    cli=build_cli(lambda action,options:calls.append((action,options)))
+    runner=CliRunner()
+    result=runner.invoke(cli,['-p',str(project),'train','--model','linear','--alpha','0.5'])
+    assert result.exit_code==0,result.output
+    options=calls[-1][1]
+    assert options['model']=='linear' and options['alpha']==0.5
+    assert options['output']==str(tmp_path/'run')
+    assert options['filename']==str(a)
+    result=runner.invoke(cli,['-p',str(project),'train'])
+    assert result.exit_code==0,result.output
+    assert calls[-1][1]['model']=='ridge'
+    project.write_text('train:\n  typo: 3\n')
+    result=runner.invoke(cli,['-p',str(project),'train'])
+    assert result.exit_code!=0 and 'Unknown keys' in result.output

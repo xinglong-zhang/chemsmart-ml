@@ -97,3 +97,19 @@ From outside a conflicting CHEMSMART source checkout, select that host using
 `PYTHONPATH=/Users/tt/chemsmart-mlip-host` before invoking the CHEMSMART
 executable in the chemsmart environment. This does not update the main checkout.
 Do not assume plain `chemsmart` selects that development host.
+
+## YAML configuration and CLI overrides
+
+```sh
+chemsmart run ml -p examples/energy.yaml train
+chemsmart run ml -p examples/energy.yaml train --model linear --seed 123 -o /tmp/new-run
+chemsmart sub ml -p examples/energy.yaml train --model ridge --alpha 0.1
+```
+
+Priority: explicit CLI arguments > YAML > command defaults. Input overrides
+`-f` and `-r` belong before `train`, while training overrides belong after it.
+YAML paths resolve relative to the YAML file; CLI paths resolve from the working
+directory. Unknown YAML keys fail instead of being silently ignored. The `data`
+section accepts `filename` and `reference`; `train` accepts the training CLI
+option names with underscores; `predict` accepts `model_path` and `output`.
+The development plugin-host requirement above still applies.

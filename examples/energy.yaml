@@ -1,0 +1,12 @@
+data:
+  filename: /Users/tt/Desktop/qm9/all_revQM9.db
+  reference: /Users/tt/Desktop/qm9/revQM9.db
+train:
+  target: energy
+  learning: delta
+  pairing: revqm9-index
+  features: composition-energy
+  model: ridge
+  alpha: 1.0
+  seed: 42
+  output: ./runs/energy-ridge

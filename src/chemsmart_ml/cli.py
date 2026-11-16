@@ -1,16 +1,53 @@
 """Standalone and host-shareable command definitions."""
 import json
+from pathlib import Path
+import yaml
 import click
 
 
 def build_cli(dispatch):
     @click.group()
-    @click.option('-f','--filename', required=True, type=click.Path(exists=True,resolve_path=True))
+    @click.option('-p','--project', type=click.Path(exists=True,resolve_path=True))
+    @click.option('-f','--filename', required=False, type=click.Path(exists=True,resolve_path=True))
     @click.option('-r','--reference', type=click.Path(exists=True,resolve_path=True))
     @click.pass_context
-    def main(ctx, filename, reference):
+    def main(ctx, project, filename, reference):
         """Learn DFT energies from paired CHEMSMART xTB databases."""
         ctx.ensure_object(dict)
+        config = {}
+        if project:
+            try:
+                config = yaml.safe_load(Path(project).read_text())
+            except (OSError, yaml.YAMLError) as exc:
+                raise click.ClickException(f"Cannot read project YAML: {exc}") from exc
+            if not isinstance(config, dict) or set(config) - {'data', 'train', 'predict'}:
+                raise click.UsageError('Project YAML must contain only data/train/predict mappings')
+            allowed = {
+                'data': {'filename', 'reference'},
+                'train': {'target','learning','pairing','features','model','alpha','seed','output'},
+                'predict': {'model_path','output'},
+            }
+            for section, keys in allowed.items():
+                values = config.get(section, {})
+                if not isinstance(values, dict) or set(values)-keys:
+                    raise click.UsageError(f'Unknown keys or invalid mapping in {section}')
+                for key in ('filename','reference','output','model_path'):
+                    if key in values:
+                        if not isinstance(values[key], str):
+                            raise click.UsageError(f'{section}.{key} must be a path string')
+                        path = Path(values[key]).expanduser()
+                        values[key] = str((Path(project).parent/path).resolve())
+            ctx.default_map = {**(ctx.default_map or {}),
+                               'train': config.get('train', {}),
+                               'predict': config.get('predict', {})}
+        data = config.get('data', {})
+        filename = filename if filename is not None else data.get('filename')
+        reference = reference if reference is not None else data.get('reference')
+        if filename is None:
+            raise click.UsageError('Provide -f/--filename or data.filename in YAML')
+        for value in (filename, reference):
+            if value is not None and not Path(value).is_file():
+                raise click.UsageError(f'Database does not exist: {value}')
         ctx.obj['ml_input'] = dict(filename=filename, reference=reference)
 
     @main.command()
