@@ -148,3 +148,11 @@ Explicit YAML paths remain supported. Project-name shell completion is provided
 through Click; the shell must already have CHEMSMART completion enabled.
 CLI overrides retain precedence. YAML-relative paths still resolve against the
 configuration directory; use absolute dataset/output paths for shared presets.
+
+`--features orbitals` adds HOMO and LUMO without requiring dipole magnitude.
+`electronic` still requires all three electronic properties. Each paired training
+run writes feature-availability.json, including counts of finite energy/HOMO/LUMO/
+dipole inputs. Missing feature errors identify the field and record explicitly.
+The supplied xTB database has complete HOMO/LUMO fields but no stored structure
+dipoles, so use orbitals for its next experiment. Failed runs leave a directory;
+choose a fresh output directory rather than overwriting that report.

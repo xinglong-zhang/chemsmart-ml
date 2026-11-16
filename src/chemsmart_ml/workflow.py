@@ -10,9 +10,12 @@ from .data import read_database, pair
 def features(row, elements, electronic):
     values = [row["atoms"].count(z) for z in elements] + [row["energy"]]
     if electronic:
-        values += [row[k] for k in ("homo", "lumo", "dipole")]
+        keys = ("homo", "lumo") if electronic == "orbitals" else ("homo", "lumo", "dipole")
+        values += [row[k] for k in keys]
     if any(x is None or not np.isfinite(x) for x in values):
-        raise ValueError("Missing/nonfinite input features; use --features composition-energy if needed")
+        names = list(elements) + ["energy"] + (list(keys) if electronic else [])
+        missing = [name for name,value in zip(names,values) if value is None or not np.isfinite(value)]
+        raise ValueError(f"Missing/nonfinite input features {missing} for record {row.get('record_id')}; inspect feature-availability.json")
     if set(row["atoms"])-set(elements):
         raise ValueError("Prediction contains elements absent from training")
     return values
@@ -45,6 +48,9 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
         raise ValueError("Pairing rejected composition mismatches; inspect pairing.json and establish a verified index mapping before training")
     if len(pairs)<10:
         raise ValueError("Need at least 10 paired samples")
+    availability = {key: sum(bool(a[key] is not None and np.isfinite(a[key])) for _,a,_ in pairs)
+                    for key in ("energy", "homo", "lumo", "dipole")}
+    (out/"feature-availability.json").write_text(json.dumps(dict(samples=len(pairs),finite_counts=availability),indent=2))
     elements = sorted({z for _,a,_ in pairs for z in a["atoms"]})
     x = np.array([features(a,elements,electronic) for _,a,_ in pairs], dtype=float)
     low = np.array([a["energy"] for _,a,_ in pairs])

@@ -56,7 +56,7 @@ def build_cli(dispatch):
     @click.option('--learning',type=click.Choice(['delta']),default='delta')
     @click.option('--pairing',type=click.Choice(['revqm9-index']),required=True,
                   help='xTB idx=N matches NPZ structure_index_in_file=N. Both inputs must share this dataset ordering.')
-    @click.option('--features',type=click.Choice(['composition-energy','electronic']),default='composition-energy')
+    @click.option('--features',type=click.Choice(['composition-energy','orbitals','electronic']),default='composition-energy')
     @click.option('--model',type=click.Choice(['linear','ridge']),default='linear',show_default=True)
     @click.option('--alpha',default=1.0,type=click.FloatRange(min=0))
     @click.option('--seed',default=42,type=int)
@@ -66,7 +66,7 @@ def build_cli(dispatch):
         options=dict(ctx.obj['ml_input'])
         if options['reference'] is None:
             raise click.UsageError('Training requires -r/--reference')
-        options.update(output=output,seed=seed,electronic=features=='electronic',model=model,alpha=alpha)
+        options.update(output=output,seed=seed,electronic=('orbitals' if features=='orbitals' else features=='electronic'),model=model,alpha=alpha)
         return dispatch('train',options)
 
     @main.command()

@@ -120,3 +120,19 @@ def test_named_project_completion_and_override(tmp_path,monkeypatch):
     assert [item.value for item in complete_project(None,None,'ele')]==['electronic']
     result=CliRunner().invoke(cli,['-p','missing','train'])
     assert result.exit_code!=0 and 'not found' in result.output
+
+
+def test_orbitals_without_dipole(tmp_path):
+    from chemsmart_ml.workflow import features
+    row=dict(atoms=['C'],energy=-1,homo=-2,lumo=1,dipole=None,record_id='sample')
+    assert features(row,['C'],'orbitals')==[1,-1,-2,1]
+    with pytest.raises(ValueError,match='dipole'):
+        features(row,['C'],True)
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    with sqlite3.connect(a) as db:
+        db.execute('UPDATE record_structures SET dipole_moment_magnitude=NULL')
+    train(a,b,tmp_path/'orbitals',electronic='orbitals')
+    predict(a,tmp_path/'orbitals/model.json',tmp_path/'orbitals.csv')
+    counts=json.loads((tmp_path/'orbitals/feature-availability.json').read_text())
+    assert counts['finite_counts']['dipole']==0
