@@ -92,9 +92,9 @@ Training accepts `--model linear` (ordinary least squares, default) or
 `--model ridge --alpha 1.0` (L2 regularization; intercept unpenalized).
 Both learn the energy delta; neither is a graph neural network.
 
-The local plugin-capable development host is `/Users/tt/chemsmart-mlip-host`.
+The local plugin-capable development host is `/Users/tt/chemsmart-mlip/chemsmart-plugin-work`.
 From outside a conflicting CHEMSMART source checkout, select that host using
-`PYTHONPATH=/Users/tt/chemsmart-mlip-host` before invoking the CHEMSMART
+`PYTHONPATH=/Users/tt/chemsmart-mlip/chemsmart-plugin-work` before invoking the CHEMSMART
 executable in the chemsmart environment. This does not update the main checkout.
 Do not assume plain `chemsmart` selects that development host.
 
@@ -113,3 +113,8 @@ directory. Unknown YAML keys fail instead of being silently ignored. The `data`
 section accepts `filename` and `reference`; `train` accepts the training CLI
 option names with underscores; `predict` accepts `model_path` and `output`.
 The development plugin-host requirement above still applies.
+
+The intended CHEMSMART integration base is the `plugin` branch. Its local
+checkout above successfully discovers `run ml` with the YAML-enabled CLI.
+Previous full-data training used the older integration host; scheduler execution
+and full training on this exact plugin branch remain separate validation steps.
