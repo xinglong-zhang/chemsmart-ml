@@ -40,7 +40,7 @@ identity matcher. No row-order or InChIKey matching fallback is used.
 One final stored geometry is selected per record by maximum index_in_record.
 Before production use, confirm your importer stores this geometry and
 records.total_energy as the same final state. Element composition mismatches
-are excluded and reported; molecular identity changes are counted, retained,
+are reported and block training; molecular identity changes are counted, retained,
 and grouped together across both endpoints for splitting. The adapters reject
 ambiguous duplicate indices. Energy units must be Hartree on both sides;
 this version relies on the CHEMSMART database convention, not automatic unit
@@ -77,3 +77,11 @@ python -m pytest
 Tests cover zero/one-based pairing, duplicate rejection, element mismatches,
 transitive leakage grouping, exact recovery of a synthetic delta relationship,
 and model prediction round-trip. Real database training is a separate check.
+
+## Local real-data check
+
+The supplied all_revQM9.db and revQM9.db did NOT pass the proposed index
+matching convention: many composition mismatches occurred. Do not use this
+convention on those files until the source index provenance is established.
+The plugin stops training when composition mismatches are present. Matching
+composition alone is necessary but does not establish molecular identity.

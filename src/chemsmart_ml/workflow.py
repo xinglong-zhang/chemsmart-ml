@@ -38,6 +38,8 @@ def train(filename, reference, output, seed=42, electronic=False):
     out.mkdir(parents=True, exist_ok=False)
     pairs, report = pair(read_database(filename,"source"), read_database(reference,"reference"))
     (out/"pairing.json").write_text(json.dumps(report, indent=2))
+    if report["rejected"]:
+        raise ValueError("Pairing rejected composition mismatches; inspect pairing.json and establish a verified index mapping before training")
     if len(pairs)<10:
         raise ValueError("Need at least 10 paired samples")
     elements = sorted({z for _,a,_ in pairs for z in a["atoms"]})
