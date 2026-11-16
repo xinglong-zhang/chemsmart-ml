@@ -2,12 +2,13 @@
 import json
 from pathlib import Path
 import yaml
+from .projects import resolve_project, complete_project
 import click
 
 
 def build_cli(dispatch):
     @click.group()
-    @click.option('-p','--project', type=click.Path(exists=True,resolve_path=True))
+    @click.option('-p','--project', type=str, callback=resolve_project, shell_complete=complete_project, help='Project name in ~/.chemsmart/ml or an explicit YAML path.')
     @click.option('-f','--filename', required=False, type=click.Path(exists=True,resolve_path=True))
     @click.option('-r','--reference', type=click.Path(exists=True,resolve_path=True))
     @click.pass_context

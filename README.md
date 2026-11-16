@@ -138,3 +138,13 @@ output is WORKDIR/plots. Existing output files are protected against overwrite.
 `chemsmart-ml plot` exposes the same behavior. No learning curve is available for
 the closed-form linear models. Total-energy agreement should be assessed with
 the residual panels, since a broad absolute-energy range can obscure errors.
+
+## CHEMSMART named projects
+
+Store configurations in `~/.chemsmart/ml/NAME.yaml`, then use
+`chemsmart run ml -p NAME train` (no extension required). The configuration root
+uses CHEMSMARTUserSettings.resolve_config_dir(), including CHEMSMART_CONFIG_DIR.
+Explicit YAML paths remain supported. Project-name shell completion is provided
+through Click; the shell must already have CHEMSMART completion enabled.
+CLI overrides retain precedence. YAML-relative paths still resolve against the
+configuration directory; use absolute dataset/output paths for shared presets.

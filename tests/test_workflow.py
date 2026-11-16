@@ -101,3 +101,22 @@ def test_plot_cli_without_database(tmp_path):
     assert stats['mae_kcal_mol']==pytest.approx(6.27509474)
     result=CliRunner().invoke(cli,['plot','--workdir',str(tmp_path)])
     assert result.exit_code!=0 and 'already exist' in result.output
+
+
+def test_named_project_completion_and_override(tmp_path,monkeypatch):
+    from click.testing import CliRunner
+    from chemsmart_ml.cli import build_cli
+    from chemsmart_ml.projects import complete_project
+    monkeypatch.setenv('CHEMSMART_CONFIG_DIR',str(tmp_path))
+    root=tmp_path/'ml';root.mkdir()
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    (root/'electronic.yaml').write_text('data:\n  filename: ../a.db\n  reference: ../b.db\ntrain:\n  pairing: revqm9-index\n  model: ridge\n  output: runs/test\n')
+    calls=[]
+    cli=build_cli(lambda action,options:calls.append(options))
+    result=CliRunner().invoke(cli,['-p','electronic','train','--model','linear'])
+    assert result.exit_code==0,result.output
+    assert calls[0]['model']=='linear' and calls[0]['filename']==str(a)
+    assert [item.value for item in complete_project(None,None,'ele')]==['electronic']
+    result=CliRunner().invoke(cli,['-p','missing','train'])
+    assert result.exit_code!=0 and 'not found' in result.output
