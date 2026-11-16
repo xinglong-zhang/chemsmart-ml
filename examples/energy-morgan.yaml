@@ -1,0 +1,21 @@
+data:
+  filename: /Users/tt/Desktop/qm9/all_revQM9.db
+  reference: /Users/tt/Desktop/qm9/revQM9.db
+train:
+  target: energy
+  learning: delta
+  pairing: revqm9-index
+  features: orbitals
+  fingerprint: morgan
+  morgan_radius: 2
+  morgan_size: 256
+  morgan_chirality: false
+  model: ridge
+  alpha: 1.0
+  seed: 42
+  output: /Users/tt/Desktop/qm9/runs/energy-morgan
+prepare:
+  morgan_radius: 2
+  morgan_size: 256
+  morgan_chirality: false
+  output: /Users/tt/Desktop/qm9/runs/morgan-preparation

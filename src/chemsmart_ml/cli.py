@@ -21,18 +21,19 @@ def build_cli(dispatch):
                 config = yaml.safe_load(Path(project).read_text())
             except (OSError, yaml.YAMLError) as exc:
                 raise click.ClickException(f"Cannot read project YAML: {exc}") from exc
-            if not isinstance(config, dict) or set(config) - {'data', 'train', 'predict'}:
-                raise click.UsageError('Project YAML must contain only data/train/predict mappings')
+            if not isinstance(config, dict) or set(config) - {'data', 'train', 'predict', 'prepare'}:
+                raise click.UsageError('Project YAML must contain only data/train/predict/prepare mappings')
             allowed = {
                 'data': {'filename', 'reference'},
-                'train': {'target','learning','pairing','features','model','alpha','seed','output'},
+                'train': {'target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache'},
                 'predict': {'model_path','output'},
+                'prepare': {'output','morgan_radius','morgan_size','morgan_chirality','cache'},
             }
             for section, keys in allowed.items():
                 values = config.get(section, {})
                 if not isinstance(values, dict) or set(values)-keys:
                     raise click.UsageError(f'Unknown keys or invalid mapping in {section}')
-                for key in ('filename','reference','output','model_path'):
+                for key in ('filename','reference','output','model_path','cache'):
                     if key in values:
                         if not isinstance(values[key], str):
                             raise click.UsageError(f'{section}.{key} must be a path string')
@@ -40,7 +41,8 @@ def build_cli(dispatch):
                         values[key] = str((Path(project).parent/path).resolve())
             ctx.default_map = {**(ctx.default_map or {}),
                                'train': config.get('train', {}),
-                               'predict': config.get('predict', {})}
+                               'predict': config.get('predict', {}),
+                               'prepare': config.get('prepare', {})}
         data = config.get('data', {})
         filename = filename if filename is not None else data.get('filename')
         reference = reference if reference is not None else data.get('reference')
@@ -59,14 +61,20 @@ def build_cli(dispatch):
     @click.option('--features',type=click.Choice(['composition-energy','orbitals','electronic']),default='composition-energy')
     @click.option('--model',type=click.Choice(['linear','ridge']),default='linear',show_default=True)
     @click.option('--alpha',default=1.0,type=click.FloatRange(min=0))
+    @click.option('--fingerprint',type=click.Choice(['none','morgan']),default='none')
+    @click.option('--morgan-radius',type=click.IntRange(min=0),default=2)
+    @click.option('--morgan-size',type=click.IntRange(min=1),default=2048)
+    @click.option('--morgan-chirality/--no-morgan-chirality',default=False)
+    @click.option('--cache',type=click.Path(resolve_path=True))
     @click.option('--seed',default=42,type=int)
     @click.option('-o','--output',required=True,type=click.Path(resolve_path=True))
     @click.pass_context
-    def train(ctx,target,learning,pairing,features,model,alpha,seed,output):
+    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache):
         options=dict(ctx.obj['ml_input'])
         if options['reference'] is None:
             raise click.UsageError('Training requires -r/--reference')
         options.update(output=output,seed=seed,electronic=('orbitals' if features=='orbitals' else features=='electronic'),model=model,alpha=alpha)
+        options.update(fingerprint=fingerprint,morgan_radius=morgan_radius,morgan_size=morgan_size,morgan_chirality=morgan_chirality,cache=cache)
         return dispatch('train',options)
 
     @main.command()
@@ -96,6 +104,18 @@ def build_cli(dispatch):
             raise click.ClickException(str(exc)) from exc
         click.echo(json.dumps(result,indent=2))
         return None
+    @main.command()
+    @click.option('--morgan-radius',type=click.IntRange(min=0),default=2)
+    @click.option('--morgan-size',type=click.IntRange(min=1),default=2048)
+    @click.option('--morgan-chirality/--no-morgan-chirality',default=False)
+    @click.option('--cache',type=click.Path(resolve_path=True))
+    @click.option('-o','--output',required=True,type=click.Path(resolve_path=True))
+    @click.pass_context
+    def prepare(ctx,output,morgan_radius,morgan_size,morgan_chirality,cache):
+        """Prepare reusable Morgan fingerprints without training."""
+        return dispatch('prepare',dict(filename=ctx.obj['ml_input']['filename'],output=output,
+                        morgan_radius=morgan_radius,morgan_size=morgan_size,
+                        morgan_chirality=morgan_chirality,cache=cache))
     return main
 
 

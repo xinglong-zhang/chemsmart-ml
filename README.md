@@ -156,3 +156,57 @@ dipole inputs. Missing feature errors identify the field and record explicitly.
 The supplied xTB database has complete HOMO/LUMO fields but no stored structure
 dipoles, so use orbitals for its next experiment. Failed runs leave a directory;
 choose a fresh output directory rather than overwriting that report.
+
+## Morgan structural features
+
+Install `python -m pip install -e '.[morgan]'`. The optional RDKit backend uses
+Morgan bit fingerprints, matching CHEMSMART's Tanimoto Morgan algorithm without
+running pairwise clustering or calling a private grouper method. Explicit
+hydrogens are removed consistently. The public RDKit generator API avoids the
+legacy method's deprecation warnings; no new fingerprint algorithm is invented.
+The plugin's database adapter reads the molecule SMILES associated with each
+record's last stored structure; the reference's SMILES is never used as input.
+
+See examples/energy-morgan.yaml; named configurations belong in ~/.chemsmart/ml.
+
+```sh
+chemsmart run ml -p energy-morgan prepare
+chemsmart run ml -p energy-morgan train
+chemsmart run ml -p energy-morgan train --morgan-size 512 --alpha 10 -o /tmp/morgan-512
+chemsmart run ml plot --workdir /Users/tt/Desktop/qm9/runs/energy-morgan
+```
+
+Train options: `--fingerprint none|morgan`, `--morgan-radius`, `--morgan-size`,
+`--morgan-chirality/--no-morgan-chirality`, `--cache`. YAML uses corresponding
+underscored names inside train. prepare accepts radius/size/chirality/cache/output
+in its own YAML section; keep train and prepare parameters identical to reuse
+that cache. Training automatically generates missing fingerprints, so prepare is
+optional. Raw database files remain read-only. Prediction reads fingerprint
+settings from model.json, requiring the same RDKit version, and reuses the cache.
+Existing models without fingerprint settings still work.
+
+The default shared cache is CONFIG_ROOT/ml/cache/morgan.sqlite. Cache identity
+includes canonical isomeric SMILES, radius, size, chirality, hydrogen policy,
+representation and RDKit version. Duplicate raw SMILES reuse a vector in memory;
+canonical equivalents and subsequent runs reuse packed bits on disk. Periodic
+commits permit reuse of completed batches after interruption. fingerprints.json
+records settings and cache hit/generation counts. No pickle loading is involved.
+
+The example starts with 256 bits to reduce memory/solver cost; the CLI default is
+2048 bits. Short fingerprints have more hash collisions and are not guaranteed
+to be optimal. Dense regression memory scales with samples times feature count;
+full-dataset 2048-bit fitting can require several GB. Ridge with positive alpha
+uses block Gram accumulation instead of a tall SVD. This is an approximation-free
+ridge formulation but still costs O(samples * features^2) arithmetic; sample
+selection and sparse/iterative solvers are not yet implemented. Do not assume
+fingerprint preparation and regression have the same cost.
+
+Invalid/missing SMILES stop preparation or training with the record ID, and write
+fingerprint-error.json. No silent sample dropping or automatic bond repair is
+performed. A real-data spot check found an invalid-valence SMILES in the supplied
+xTB database, so full Morgan training on that database is not yet validated and
+will require resolving those source structures. Failed output directories are
+retained for inspection; choose a new output directory when retrying.
+
+SOAP is not yet connected to this plugin. Morgan produces 2D connectivity
+features and does not encode the final geometry's distances or angles.

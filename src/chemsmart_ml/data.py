@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 
-def read_database(path, role):
+def read_database(path, role, include_smiles=False):
     """Explicit revQM9 convention: source idx is one-based; NPZ structure_index_in_file is one-based."""
     uri = Path(path).resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
@@ -19,8 +19,12 @@ def read_database(path, role):
         WHERE rs.index_in_record=(SELECT MAX(q.index_in_record)
             FROM record_structures q WHERE q.record_id=r.record_id)
         """
+        if include_smiles:
+            query = query.replace('rs.dipole_moment_magnitude\n', 'rs.dipole_moment_magnitude, m.smiles\n')
+            query = query.replace('WHERE rs.index_in_record=', 'JOIN molecules m ON m.molecule_id=s.molecule_id WHERE rs.index_in_record=')
         rows = {}
-        for rid, source, energy, homo, lumo, mid, symbols, index, dipole in db.execute(query):
+        for record in db.execute(query):
+            rid, source, energy, homo, lumo, mid, symbols, index, dipole = record[:9]
             if role == "source":
                 match = re.search(r"idx(\d+)(?:\D|$)", source or "")
                 if not match:
@@ -35,6 +39,8 @@ def read_database(path, role):
             atoms = json.loads(symbols)
             rows[key] = dict(record_id=rid, energy=energy, homo=homo, lumo=lumo,
                              dipole=dipole, molecule_id=mid, atoms=atoms)
+            if include_smiles:
+                rows[key]["smiles"] = record[9]
         if not rows:
             raise ValueError(f"No samples in {path}")
         return rows
