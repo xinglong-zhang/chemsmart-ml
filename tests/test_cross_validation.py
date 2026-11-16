@@ -85,3 +85,48 @@ def test_cross_validation_rejects_unsupported_model(tmp_path):
 
     with pytest.raises(ValueError, match="Cross-validation currently supports"):
         train("unused", "unused", tmp_path / "cv", model="ridge", cv_folds=5)
+
+
+def test_plot_saved_cv_report_without_training(tmp_path):
+    report = {
+        "folds": [
+            {
+                "fold": i,
+                "train_mae_kcal_mol": 1.2 + i * 0.01,
+                "mae_kcal_mol": 1.5 + i * 0.01,
+            }
+            for i in range(1, 6)
+        ]
+    }
+    (tmp_path / "cross-validation.json").write_text(json.dumps(report))
+    result = CliRunner().invoke(
+        build_cli(execute), ["plot", "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "plots/cross-validation.png").is_file()
+    assert (tmp_path / "plots/cross-validation.pdf").is_file()
+    assert "validation_mae_mean_kcal_mol" in result.output
+    result = CliRunner().invoke(
+        build_cli(execute), ["plot", "--workdir", str(tmp_path)]
+    )
+    assert result.exit_code != 0 and "already exist" in result.output
+
+
+def test_cross_validation_automatically_writes_plot(tmp_path):
+    from chemsmart_ml.workflow import train
+
+    source = tmp_path / "source.db"
+    reference = tmp_path / "reference.db"
+    database(source)
+    database(reference, True)
+    train(
+        source,
+        reference,
+        tmp_path / "cv",
+        model="hist-gradient-boosting",
+        max_iter=2,
+        cv_folds=5,
+        plot=True,
+    )
+    assert (tmp_path / "cv/cross-validation.png").is_file()
+    assert (tmp_path / "cv/cross-validation.pdf").is_file()

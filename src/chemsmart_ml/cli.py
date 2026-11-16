@@ -136,9 +136,16 @@ def build_cli(dispatch):
             if parent.info_name == 'sub':
                 raise click.UsageError('Plot is local; use chemsmart run ml plot')
             parent = parent.parent
-        from .plotting import plot_results
+        from .plotting import plot_results, plot_cross_validation
         try:
-            result = plot_results(workdir,split,output)
+            report = Path(workdir)/'cross-validation.json'
+            if report.is_file():
+                if split != 'test':
+                    raise ValueError('Cross-validation plots show folds; --split does not apply')
+                destination = Path(output) if output else Path(workdir)/'plots'
+                result = plot_cross_validation(json.loads(report.read_text()), destination)
+            else:
+                result = plot_results(workdir,split,output)
         except (ValueError,OSError) as exc:
             raise click.ClickException(str(exc)) from exc
         click.echo(json.dumps(result,indent=2))

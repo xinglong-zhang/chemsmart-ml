@@ -130,32 +130,7 @@ def cross_validate_tree(
     )
     (out / "cross-validation.json").write_text(json.dumps(report, indent=2))
     if plot:
-        import matplotlib
+        from .plotting import plot_cross_validation
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
-        positions = np.arange(len(folds))
-        width = 0.36
-        ax.bar(
-            positions - width / 2, train_vals, width, label="Training", color="#9CC8E3"
-        )
-        ax.bar(positions + width / 2, vals, width, label="Validation", color="#8063A5")
-        ax.set_xticks(positions, [str(f["fold"]) for f in folds])
-        ax.axhline(
-            vals.mean(),
-            color="#8063A5",
-            linestyle="--",
-            label=f"Mean {vals.mean():.3f} kcal/mol",
-        )
-        ax.set(
-            xlabel="Validation fold",
-            ylabel="MAE (kcal/mol)",
-            title="Grouped cross-validation",
-        )
-        ax.legend(frameon=False)
-        for ext in ("png", "pdf"):
-            fig.savefig(out / f"cross-validation.{ext}", dpi=180)
-        plt.close(fig)
+        plot_cross_validation(report, out)
     return report

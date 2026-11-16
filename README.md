@@ -391,3 +391,16 @@ test set remains appropriate for a strict final assessment. The Morgan/ SOAP
 feature matrix is prepared once per CV job and caches are reused, but the model
 is fitted once per fold. Five folds of 500 boosting rounds can take substantially
 longer than one regular training run. Use a fresh output directory for each run.
+
+To redraw an existing cross-validation report without retraining:
+
+```sh
+chemsmart run ml plot --workdir /path/to/cross-validation-run
+```
+
+This reads `cross-validation.json` and writes the updated figure into the run's
+`plots/` directory. It refuses to overwrite existing plots; use `-o` to select a
+new directory. New CV runs automatically produce the same clear grouped chart
+in their result directory when plotting is enabled. The footer reports the mean
+and sample standard deviation across validation folds; it is not a confidence
+interval.
