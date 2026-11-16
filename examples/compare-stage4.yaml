@@ -1,0 +1,28 @@
+data:
+  filename: /Users/tt/Desktop/qm9/all_revQM9_repaired.db
+  reference: /Users/tt/Desktop/qm9/revQM9.db
+split:
+  train: 0.8
+  valid: 0.1
+  test: 0.1
+train:
+  target: energy
+  learning: delta
+  pairing: revqm9-index
+  features: orbitals
+  fingerprint: morgan
+  morgan_radius: 2
+  morgan_size: 256
+  morgan_chirality: false
+  descriptor: soap
+  soap_r_cut: 5.0
+  soap_n_max: 2
+  soap_l_max: 2
+  soap_sigma: 0.5
+  soap_aggregation: sum
+  model: ridge
+  alpha: 1.0e-06
+  seed: 42
+  manifest: /Users/tt/Desktop/qm9/runs/repaired-validation/valid-samples.json
+  output: /Users/tt/chemsmart/runs/energy-soap-repaired
+  plot: true

@@ -27,3 +27,9 @@ train:
   # morgan_radius: 2
   # morgan_size: 2048
   # morgan_chirality: false
+
+# 比例必须为正且相加为 1；按分子身份分组，实际比例可能略有差异。
+split:
+  train: 0.8
+  valid: 0.1
+  test: 0.1

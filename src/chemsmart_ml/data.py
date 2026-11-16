@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 
-def read_database(path, role, include_smiles=False):
+def read_database(path, role, include_smiles=False, include_positions=False):
     """Explicit revQM9 convention: source idx is one-based; NPZ structure_index_in_file is one-based."""
     uri = Path(path).resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
@@ -22,6 +22,8 @@ def read_database(path, role, include_smiles=False):
         if include_smiles:
             query = query.replace('rs.dipole_moment_magnitude\n', 'rs.dipole_moment_magnitude, m.smiles\n')
             query = query.replace('WHERE rs.index_in_record=', 'LEFT JOIN molecules m ON m.molecule_id=s.molecule_id WHERE rs.index_in_record=')
+        if include_positions:
+            query = query.replace('rs.dipole_moment_magnitude', 'rs.dipole_moment_magnitude, s.positions_json')
         rows = {}
         for record in db.execute(query):
             rid, source, energy, homo, lumo, mid, symbols, index, dipole = record[:9]
@@ -39,8 +41,12 @@ def read_database(path, role, include_smiles=False):
             atoms = json.loads(symbols)
             rows[key] = dict(record_id=rid, energy=energy, homo=homo, lumo=lumo,
                              dipole=dipole, molecule_id=mid, atoms=atoms)
+            offset = 9
+            if include_positions:
+                rows[key]["positions"] = json.loads(record[offset]) if record[offset] else None
+                offset += 1
             if include_smiles:
-                rows[key]["smiles"] = record[9]
+                rows[key]["smiles"] = record[offset]
         if not rows:
             raise ValueError(f"No samples in {path}")
         return rows

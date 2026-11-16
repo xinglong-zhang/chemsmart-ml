@@ -269,3 +269,68 @@ The template starts with the lightweight linear/composition-energy baseline.
 Its optional ridge alpha is an initial candidate, not a universal optimum.
 Current pairing support remains revqm9-index: arbitrary unrelated database
 formats or numbering conventions are not automatically matched.
+
+## SOAP three-dimensional descriptors
+
+A compatible CHEMSMART host with `Molecule.calculate_soap` and SciPy is required.
+`train.descriptor: soap` (or `train --descriptor soap`) appends molecular SOAP
+features computed from the final stored xTB coordinates. Morgan fingerprints
+can be enabled simultaneously. The default SOAP settings are `soap_r_cut: 5.0`
+(Å), `soap_n_max: 2`, `soap_l_max: 2`, `soap_sigma: 0.5` (Å), and
+`soap_aggregation: sum`; `mean` is also supported. A common element basis is
+built for the selected dataset and stored in the model. Saved models reject
+unseen elements and mismatched SOAP implementation/NumPy/SciPy versions instead
+of silently changing feature semantics.
+
+SOAP caches are independent of Morgan caches. The default is
+`~/.chemsmart/ml/cache/soap.sqlite`; `train.soap_cache` / `--soap-cache` can
+choose another path. Cache entries depend on the full geometry, atom order,
+element basis, SOAP settings, implementation hash and dependency versions;
+completed batches are saved during calculation. A report is saved as soap.json.
+The descriptor is based on coordinates and does not establish molecular
+connectivity. Geometry validation is limited to finite coordinates and shape.
+
+The prepared `compare-stage4.yaml` uses the repaired database, the permanent
+validation manifest, the same Morgan settings, Ridge alpha, and 80/10/10 split
+as the previous Stage 3. Run `chemsmart run ml -p compare-stage4 train`. SOAP
+feature settings use smaller expansion orders than the CHEMSMART SOAP API
+defaults to keep a first test tractable; these are not claimed optimal. First
+use requires computing all geometries; 100 real structures took about 1.5 s
+on the tested machine, which is only a rough sequential estimate. Memory and
+time increase with the number of elements, SOAP dimensions and molecules.
+
+## Configurable data split and model
+
+```yaml
+split:
+  train: 0.8
+  valid: 0.1
+  test: 0.1
+train:
+  model: hist-gradient-boosting  # linear, ridge, hist-gradient-boosting
+  max_iter: 100
+  learning_rate: 0.1
+  max_leaf_nodes: 31
+```
+
+All fractions must be positive and sum to one. These are hash-based target
+fractions, not exact sample counts, since all connected molecular identities
+must stay together. The seed and full split fractions are persisted with the
+model. Without a split section the historical 0.8/0.1/0.1 defaults remain.
+Override with `train --train-fraction 0.7 --valid-fraction 0.15 --test-fraction
+0.15`; specify all three when changing proportions. YAML train_fraction,
+valid_fraction and test_fraction are also accepted but cannot duplicate a split
+section key.
+
+Histogram gradient boosting is an optional scikit-learn model: install
+`chemsmart-ml[trees]`. It first fits an unregularized composition/energy linear
+baseline on the training split and learns residual corrections with trees. Its
+hyperparameters are `--max-iter`, `--learning-rate`, `--max-leaf-nodes`; Ridge's
+`alpha` is not used. The model and explicit tree nodes are exported to JSON,
+not Python pickle; an export parity check compares with scikit-learn. This uses
+scikit-learn's internal tree representation during export (tested on 1.7.2),
+so changes in a later library version may require adapter updates. Prediction
+uses the recorded feature settings and does not need scikit-learn. Each model
+uses the same fixed molecule-grouped split, regardless of model selection.
+Tree and SOAP accuracy on the full scientific dataset has not yet been measured;
+start with the Stage 3 comparison, fixed split and validation metrics.

@@ -22,11 +22,12 @@ def build_cli(dispatch):
                 config = yaml.safe_load(Path(project).read_text())
             except (OSError, yaml.YAMLError) as exc:
                 raise click.ClickException(f"Cannot read project YAML: {exc}") from exc
-            if not isinstance(config, dict) or set(config) - {'data', 'train', 'predict', 'prepare', 'validate'}:
+            if not isinstance(config, dict) or set(config) - {'data', 'train', 'predict', 'prepare', 'validate', 'split'}:
                 raise click.UsageError('Project YAML must contain only data/train/predict/prepare mappings')
             allowed = {
                 'data': {'filename', 'reference'},
-                'train': {'target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest','plot'},
+                'split': {'train','valid','test'},
+                'train': {'descriptor','soap_r_cut','soap_n_max','soap_l_max','soap_sigma','soap_aggregation','soap_cache','max_iter','learning_rate','max_leaf_nodes','train_fraction','valid_fraction','test_fraction','target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest','plot'},
                 'predict': {'model_path','output'},
                 'validate': {'output','features','fingerprint','pairing'},
                 'prepare': {'output','morgan_radius','morgan_size','morgan_chirality','cache','manifest'},
@@ -35,14 +36,21 @@ def build_cli(dispatch):
                 values = config.get(section, {})
                 if not isinstance(values, dict) or set(values)-keys:
                     raise click.UsageError(f'Unknown keys or invalid mapping in {section}')
-                for key in ('filename','reference','output','model_path','cache','manifest'):
+                for key in ('filename','reference','output','model_path','cache','manifest','soap_cache'):
                     if key in values:
                         if not isinstance(values[key], str):
                             raise click.UsageError(f'{section}.{key} must be a path string')
                         path = Path(values[key]).expanduser()
                         values[key] = str((Path(project).parent/path).resolve())
+            split = config.get('split', {})
+            train_defaults = dict(config.get('train', {}))
+            for section,option in [('train','train_fraction'),('valid','valid_fraction'),('test','test_fraction')]:
+                if section in split:
+                    if option in train_defaults:
+                        raise click.UsageError(f'Specify split.{section} or train.{option}, not both')
+                    train_defaults[option] = split[section]
             ctx.default_map = {**(ctx.default_map or {}),
-                               'train': config.get('train', {}),
+                               'train': train_defaults,
                                'predict': config.get('predict', {}),
                                'prepare': config.get('prepare', {}),
                                'validate': config.get('validate', {})}
@@ -63,7 +71,7 @@ def build_cli(dispatch):
                   help='xTB idx=N matches NPZ structure_index_in_file=N. Both inputs must share this dataset ordering.')
     @click.option('--features',type=click.Choice(['composition-energy','orbitals','electronic']),default='composition-energy')
     @click.option('--plot/--no-plot',default=True,show_default=True,help='Generate test-set plots after training.')
-    @click.option('--model',type=click.Choice(['linear','ridge']),default='linear',show_default=True)
+    @click.option('--model',type=click.Choice(['linear','ridge','hist-gradient-boosting']),default='linear',show_default=True)
     @click.option('--alpha',default=1.0,type=click.FloatRange(min=0))
     @click.option('--fingerprint',type=click.Choice(['none','morgan']),default='none')
     @click.option('--morgan-radius',type=click.IntRange(min=0),default=2)
@@ -71,15 +79,32 @@ def build_cli(dispatch):
     @click.option('--morgan-chirality/--no-morgan-chirality',default=False)
     @click.option('--manifest',type=click.Path(exists=True,resolve_path=True))
     @click.option('--cache',type=click.Path(resolve_path=True))
+    @click.option('--train-fraction',type=click.FloatRange(min=0,max=1),default=0.8,show_default=True)
+    @click.option('--valid-fraction',type=click.FloatRange(min=0,max=1),default=0.1,show_default=True)
+    @click.option('--test-fraction',type=click.FloatRange(min=0,max=1),default=0.1,show_default=True)
+    @click.option('--descriptor',type=click.Choice(['none','soap']),default='none')
+    @click.option('--soap-r-cut',type=click.FloatRange(min=1,min_open=True),default=5.0)
+    @click.option('--soap-n-max',type=click.IntRange(min=1),default=2)
+    @click.option('--soap-l-max',type=click.IntRange(min=0,max=20),default=2)
+    @click.option('--soap-sigma',type=click.FloatRange(min=0,min_open=True),default=0.5)
+    @click.option('--soap-aggregation',type=click.Choice(['sum','mean']),default='sum')
+    @click.option('--soap-cache',type=click.Path(resolve_path=True))
+    @click.option('--max-iter',type=click.IntRange(min=1),default=100)
+    @click.option('--learning-rate',type=click.FloatRange(min=0,min_open=True),default=0.1)
+    @click.option('--max-leaf-nodes',type=click.IntRange(min=2),default=31)
     @click.option('--seed',default=42,type=int)
     @click.option('-o','--output',default=lambda: str(Path.cwd()/('ml-train-'+uuid.uuid4().hex[:8])),type=click.Path(resolve_path=True),help='Output directory; defaults to a new ml-train-* directory under the working directory.')
     @click.pass_context
-    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot):
+    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot,train_fraction,valid_fraction,test_fraction,descriptor,soap_r_cut,soap_n_max,soap_l_max,soap_sigma,soap_aggregation,soap_cache,max_iter,learning_rate,max_leaf_nodes):
         options=dict(ctx.obj['ml_input'])
         if options['reference'] is None:
             raise click.UsageError('Training requires -r/--reference')
         options.update(output=output,plot=plot,seed=seed,electronic=('orbitals' if features=='orbitals' else features=='electronic'),model=model,alpha=alpha)
         options.update(fingerprint=fingerprint,morgan_radius=morgan_radius,morgan_size=morgan_size,morgan_chirality=morgan_chirality,cache=cache,manifest=manifest)
+        options.update(train_fraction=train_fraction,valid_fraction=valid_fraction,test_fraction=test_fraction,
+            descriptor=descriptor,soap_r_cut=soap_r_cut,soap_n_max=soap_n_max,soap_l_max=soap_l_max,
+            soap_sigma=soap_sigma,soap_aggregation=soap_aggregation,soap_cache=soap_cache,
+            max_iter=max_iter,learning_rate=learning_rate,max_leaf_nodes=max_leaf_nodes)
         return dispatch('train',options)
 
     @main.command()

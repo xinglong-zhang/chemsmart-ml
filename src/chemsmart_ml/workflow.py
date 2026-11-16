@@ -36,9 +36,14 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True):
-    if model not in ("linear", "ridge") or not np.isfinite(alpha) or alpha < 0:
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True, train_fraction=0.8, valid_fraction=0.1, test_fraction=0.1, descriptor="none", soap_r_cut=5.0, soap_n_max=2, soap_l_max=2, soap_sigma=0.5, soap_aggregation="sum", soap_cache=None, max_iter=100, learning_rate=0.1, max_leaf_nodes=31):
+    if model not in ("linear", "ridge", "hist-gradient-boosting") or not np.isfinite(alpha) or alpha < 0:
         raise ValueError("Invalid model or regularization strength")
+    fractions=np.array([train_fraction,valid_fraction,test_fraction],dtype=float)
+    if not np.isfinite(fractions).all() or (fractions<=0).any() or not np.isclose(fractions.sum(),1.0,rtol=0,atol=1e-9):
+        raise ValueError('Split fractions must be positive and sum to 1')
+    if descriptor not in ('none','soap'):
+        raise ValueError('Unsupported 3D descriptor')
     if plot:
         try:
             __import__("matplotlib")  # Check before the expensive database read.
@@ -47,7 +52,7 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     model_name = model
     out = Path(output)
     out.mkdir(parents=True, exist_ok=False)
-    pairs, report = pair(read_database(filename,"source", include_smiles=fingerprint=="morgan"), read_database(reference,"reference"))
+    pairs, report = pair(read_database(filename,"source", include_smiles=fingerprint=="morgan", include_positions=descriptor=="soap"), read_database(reference,"reference"))
     group_by_index = dict(zip([key for key,_,_ in pairs],groups(pairs)))
     if manifest:
         from .validation import load_manifest
@@ -86,6 +91,13 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
         (out/'fingerprints.json').write_text(json.dumps(cache_report,indent=2))
     elif fingerprint != "none":
         raise ValueError('Unsupported fingerprint')
+    soap_settings = None
+    if descriptor == "soap":
+        from .soap_features import soap_config,cached_soap
+        soap_settings=soap_config(elements,soap_r_cut,soap_n_max,soap_l_max,soap_sigma,soap_aggregation)
+        vectors,soap_report=cached_soap([a for _,a,_ in pairs],soap_settings,soap_cache)
+        x=np.column_stack([x,vectors])
+        (out/'soap.json').write_text(json.dumps(soap_report,indent=2))
     low = np.array([a["energy"] for _,a,_ in pairs])
     target = np.array([b["energy"] for _,_,b in pairs], dtype=float)
     if not np.isfinite(target).all():
@@ -93,7 +105,7 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     labels = []
     for group in [group_by_index[key] for key,_,_ in pairs]:
         h = int(hashlib.sha256(f"{seed}:{group}".encode()).hexdigest()[:12],16)/16**12
-        labels.append("train" if h<0.8 else "valid" if h<0.9 else "test")
+        labels.append("train" if h<train_fraction else "valid" if h<(train_fraction+valid_fraction) else "test")
     labels = np.array(labels)
     if any(not (labels==s).any() for s in ("train","valid","test")):
         raise ValueError("Empty split; need more independent molecular groups")
@@ -101,7 +113,18 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     mean, scale = x[mask].mean(0), x[mask].std(0)
     scale[scale==0]=1
     design = np.column_stack([np.ones(len(x)), (x-mean)/scale])
-    if model_name == "ridge" and alpha > 0:
+    tree_model = None
+    if model_name == "hist-gradient-boosting":
+        from .tree_model import fit_tree,predict_tree
+        # Retain an unregularized composition/energy baseline to remove the
+        # extensive elemental offset before learning nonlinear corrections.
+        base_size=len(elements)+2
+        base_coef=np.linalg.lstsq(design[mask,:base_size],(target-low)[mask],rcond=None)[0]
+        residual=(target-low)[mask]-design[mask,:base_size]@base_coef
+        tree_model=fit_tree(design[mask,1:],residual,seed,max_iter,learning_rate,max_leaf_nodes)
+        tree_model['base_coefficients']=base_coef.tolist()
+        correction=design[:,:base_size]@base_coef+predict_tree(design[:,1:],tree_model)
+    elif model_name == "ridge" and alpha > 0:
         # Avoid an expensive tall-matrix SVD and extra full training-matrix copy.
         gram = np.eye(design.shape[1]) * alpha
         gram[0,0] = 0
@@ -116,10 +139,12 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
         coef = np.linalg.solve(gram,rhs)
     else:
         coef = np.linalg.lstsq(design[mask], (target-low)[mask], rcond=None)[0]
-    pred = low + design@coef
-    model = dict(format_version=1, model=model_name+"-delta", alpha=alpha, target="total_energy", unit="Hartree",
+    if tree_model is None:
+        correction=design@coef
+    pred = low + correction
+    model = dict(format_version=1, model=model_name+"-delta", alpha=alpha if tree_model is None else None, target="total_energy", unit="Hartree",
                  elements=elements, electronic=electronic, fingerprint=fingerprint_settings, mean=mean.tolist(), scale=scale.tolist(),
-                 coefficients=coef.tolist(), seed=seed, plot=plot,
+                 coefficients=coef.tolist() if tree_model is None else None, tree=tree_model, soap=soap_settings, split=dict(train=train_fraction,valid=valid_fraction,test=test_fraction), seed=seed, plot=plot,
                  source=str(Path(filename).resolve()), reference=str(Path(reference).resolve()))
     (out/"model.json").write_text(json.dumps(model,indent=2))
     metrics = {s:dict(n=int((labels==s).sum()),mae_hartree=float(np.abs(pred[labels==s]-target[labels==s]).mean())) for s in ("train","valid","test")}
@@ -136,23 +161,39 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
 
 def predict(filename, model_path, output):
     model=json.loads(Path(model_path).read_text())
-    if model.get("format_version")!=1 or model.get("model") not in ("linear-delta", "ridge-delta"):
+    if model.get("format_version")!=1 or model.get("model") not in ("linear-delta", "ridge-delta", "hist-gradient-boosting-delta"):
         raise ValueError("Unsupported model format")
     settings = model.get('fingerprint')
-    rows=read_database(filename,"source",include_smiles=settings is not None)
+    soap_settings=model.get('soap')
+    rows=read_database(filename,"source",include_smiles=settings is not None,include_positions=soap_settings is not None)
     vectors = None
     if settings:
         from .fingerprints import cached_morgan
         vectors, _ = cached_morgan([row for _,row in sorted(rows.items())],settings)
 
+    soap_vectors=None
+    if soap_settings:
+        from .soap_features import cached_soap
+        soap_vectors,_=cached_soap([row for _,row in sorted(rows.items())],soap_settings)
+    ordered=sorted(rows.items())
     with Path(output).open("x") as f:
         w=csv.writer(f);w.writerow(["npz_index","record_id","predicted_energy_hartree"])
-        for i,(key,row) in enumerate(sorted(rows.items())):
-            x=np.array(features(row,model["elements"],model["electronic"]))
+        for start in range(0,len(ordered),1024):
+            batch=ordered[start:start+1024]
+            x=np.asarray([features(row,model["elements"],model["electronic"]) for _,row in batch])
             if vectors is not None:
-                x = np.r_[x,vectors[i]]
-            d=np.r_[1,(x-model["mean"])/model["scale"]]
-            w.writerow([key,row["record_id"],row["energy"]+d@model["coefficients"]])
+                x=np.column_stack([x,vectors[start:start+len(batch)]])
+            if soap_vectors is not None:
+                x=np.column_stack([x,soap_vectors[start:start+len(batch)]])
+            design=np.column_stack([np.ones(len(batch)),(x-model["mean"])/model["scale"]])
+            if model['model']=='hist-gradient-boosting-delta':
+                from .tree_model import predict_tree
+                tree=model['tree'];coef=tree['base_coefficients']
+                correction=design[:,:len(coef)]@coef+predict_tree(design[:,1:],tree)
+            else:
+                correction=design@model['coefficients']
+            for (key,row),value in zip(batch,correction):
+                w.writerow([key,row['record_id'],row['energy']+value])
     return dict(samples=len(rows),output=str(output))
 
 
