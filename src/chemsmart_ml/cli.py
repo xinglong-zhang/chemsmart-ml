@@ -27,7 +27,7 @@ def build_cli(dispatch):
             allowed = {
                 'data': {'filename', 'reference'},
                 'split': {'train','valid','test'},
-                'train': {'descriptor','soap_r_cut','soap_n_max','soap_l_max','soap_sigma','soap_aggregation','soap_cache','max_iter','learning_rate','max_leaf_nodes','hidden_size','kernel_alpha','kernel_gamma','kernel_max_samples','kernel_subsample','train_fraction','valid_fraction','test_fraction','target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest','plot'},
+                'train': {'descriptor','soap_r_cut','soap_n_max','soap_l_max','soap_sigma','soap_aggregation','soap_cache','max_iter','learning_rate','max_leaf_nodes','hidden_size','kernel_alpha','kernel_gamma','kernel_max_samples','kernel_subsample','cv_folds','train_fraction','valid_fraction','test_fraction','target','learning','pairing','features','model','alpha','seed','output','fingerprint','morgan_radius','morgan_size','morgan_chirality','cache','manifest','plot'},
                 'predict': {'model_path','output'},
                 'validate': {'output','features','fingerprint','pairing'},
                 'prepare': {'output','morgan_radius','morgan_size','morgan_chirality','cache','manifest'},
@@ -94,13 +94,14 @@ def build_cli(dispatch):
     @click.option('--kernel-gamma',type=click.FloatRange(min=0,min_open=True),default=0.01)
     @click.option('--kernel-subsample/--no-kernel-subsample',default=False,help='Explicitly limit kernel training samples; validation/test remain unchanged.')
     @click.option('--kernel-max-samples',type=click.IntRange(min=1,max=10000),default=2000)
+    @click.option('--cv-folds',type=click.IntRange(min=0),default=0,help='Grouped CV folds on training+validation, holding the test set out; 0 disables CV.')
     @click.option('--max-iter',type=click.IntRange(min=1),default=100)
     @click.option('--learning-rate',type=click.FloatRange(min=0,min_open=True),default=None)
     @click.option('--max-leaf-nodes',type=click.IntRange(min=2),default=31)
     @click.option('--seed',default=42,type=int)
     @click.option('-o','--output',default=lambda: str(Path.cwd()/('ml-train-'+uuid.uuid4().hex[:8])),type=click.Path(resolve_path=True),help='Output directory; defaults to a new ml-train-* directory under the working directory.')
     @click.pass_context
-    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot,train_fraction,valid_fraction,test_fraction,descriptor,soap_r_cut,soap_n_max,soap_l_max,soap_sigma,soap_aggregation,soap_cache,max_iter,learning_rate,max_leaf_nodes,hidden_size,kernel_alpha,kernel_gamma,kernel_max_samples,kernel_subsample):
+    def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot,train_fraction,valid_fraction,test_fraction,descriptor,soap_r_cut,soap_n_max,soap_l_max,soap_sigma,soap_aggregation,soap_cache,max_iter,learning_rate,max_leaf_nodes,hidden_size,kernel_alpha,kernel_gamma,kernel_max_samples,kernel_subsample,cv_folds):
         options=dict(ctx.obj['ml_input'])
         if options['reference'] is None:
             raise click.UsageError('Training requires -r/--reference')
@@ -112,7 +113,7 @@ def build_cli(dispatch):
             descriptor=descriptor,soap_r_cut=soap_r_cut,soap_n_max=soap_n_max,soap_l_max=soap_l_max,
             soap_sigma=soap_sigma,soap_aggregation=soap_aggregation,soap_cache=soap_cache,
             max_iter=max_iter,learning_rate=learning_rate,max_leaf_nodes=max_leaf_nodes,
-            hidden_size=hidden_size,kernel_alpha=kernel_alpha,kernel_gamma=kernel_gamma,kernel_max_samples=kernel_max_samples,kernel_subsample=kernel_subsample)
+            hidden_size=hidden_size,kernel_alpha=kernel_alpha,kernel_gamma=kernel_gamma,kernel_max_samples=kernel_max_samples,kernel_subsample=kernel_subsample,cv_folds=cv_folds)
         return dispatch('train',options)
 
     @main.command()

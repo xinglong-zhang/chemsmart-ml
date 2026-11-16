@@ -363,3 +363,31 @@ comparison. SOAP/Morgan features must fit memory even when KRR is subsampled.
 SchNet and MACE are not yet implemented by this plugin. They require dedicated
 atomic-geometry model training and inference rather than reusing the table-only
 model adapters. Do not treat a table model as an implementation of either.
+
+## Grouped cross-validation
+
+Five-fold CV is currently implemented for `hist-gradient-boosting`. Set
+`train.cv_folds: 5` or pass `train --cv-folds 5`. A named project example is
+`examples/cv-tree-500.yaml`; its dataset paths and manifest are illustrative.
+
+The existing hash-based train/valid/test split is computed first. The original
+`test` partition is held out, and GroupKFold (shuffled with the configured seed)
+rotates validation over the combined train+valid development samples. This
+preserves source/reference molecular-identity connected components within a
+single fold. Each fold fits scaling and the composition/energy baseline only on
+that fold's training rows. Fixed molecular descriptors are reused; test labels
+are not used in model fitting or fold scoring. `cross-validation.json` contains
+per-fold train/validation MAE and validation RMSE, the mean and sample standard
+deviation of fold MAEs, model/feature settings and held-out count. The standard
+deviation describes fold variation, not a confidence interval. `cv-assignments.csv`
+records sample IDs, groups, held-out status and validation fold. If plotting is
+enabled, cross-validation.png/pdf compare per-fold training/validation MAE.
+
+CV does not fit a final all-development model or evaluate the held-out test set;
+normal `train` remains separate. Each fold uses about 72% of the whole dataset
+for training and 18% for validation when holding out 10%. The existing test set
+has already been inspected in earlier experiments, so a truly independent new
+test set remains appropriate for a strict final assessment. The Morgan/ SOAP
+feature matrix is prepared once per CV job and caches are reused, but the model
+is fitted once per fold. Five folds of 500 boosting rounds can take substantially
+longer than one regular training run. Use a fresh output directory for each run.

@@ -36,7 +36,9 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True, train_fraction=0.8, valid_fraction=0.1, test_fraction=0.1, descriptor="none", soap_r_cut=5.0, soap_n_max=2, soap_l_max=2, soap_sigma=0.5, soap_aggregation="sum", soap_cache=None, max_iter=100, learning_rate=0.1, max_leaf_nodes=31, hidden_size=128, kernel_alpha=0.001, kernel_gamma=0.01, kernel_max_samples=2000, kernel_subsample=False):
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True, train_fraction=0.8, valid_fraction=0.1, test_fraction=0.1, descriptor="none", soap_r_cut=5.0, soap_n_max=2, soap_l_max=2, soap_sigma=0.5, soap_aggregation="sum", soap_cache=None, max_iter=100, learning_rate=0.1, max_leaf_nodes=31, hidden_size=128, kernel_alpha=0.001, kernel_gamma=0.01, kernel_max_samples=2000, kernel_subsample=False, cv_folds=0):
+    if cv_folds and (model != "hist-gradient-boosting" or cv_folds < 2):
+        raise ValueError("Cross-validation currently supports hist-gradient-boosting with at least two folds")
     if model not in ("linear", "ridge", "hist-gradient-boosting", "mlp", "kernel-ridge") or not np.isfinite(alpha) or alpha < 0:
         raise ValueError("Invalid model or regularization strength")
     fractions=np.array([train_fraction,valid_fraction,test_fraction],dtype=float)
@@ -109,6 +111,15 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     labels = np.array(labels, dtype="<U6")
     if any(not (labels==s).any() for s in ("train","valid","test")):
         raise ValueError("Empty split; need more independent molecular groups")
+    if cv_folds:
+        from .cross_validation import cross_validate_tree
+        return cross_validate_tree(x,low,target,pairs,[group_by_index[key] for key,_,_ in pairs],labels,out,
+            seed=seed,n_splits=cv_folds,elements=elements,max_iter=max_iter,learning_rate=learning_rate,
+            max_leaf_nodes=max_leaf_nodes,plot=plot,
+            model_settings=dict(model=model_name,max_iter=max_iter,learning_rate=learning_rate,
+                max_leaf_nodes=max_leaf_nodes,features=electronic,fingerprint=fingerprint_settings,
+                soap=soap_settings,split=dict(train=train_fraction,valid=valid_fraction,test=test_fraction),
+                source=str(Path(filename).resolve()),reference=str(Path(reference).resolve())))
     if model_name == 'kernel-ridge' and kernel_subsample:
         candidates=np.flatnonzero(labels=='train')
         if len(candidates)>kernel_max_samples:
