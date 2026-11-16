@@ -85,3 +85,19 @@ def test_yaml_precedence_and_paths(tmp_path):
     project.write_text('train:\n  typo: 3\n')
     result=runner.invoke(cli,['-p',str(project),'train'])
     assert result.exit_code!=0 and 'Unknown keys' in result.output
+
+
+def test_plot_cli_without_database(tmp_path):
+    from click.testing import CliRunner
+    from chemsmart_ml.cli import build_cli
+    pytest.importorskip('matplotlib')
+    (tmp_path/'samples.csv').write_text('split,reference_energy,prediction\ntest,-10,-9.99\ntrain,-20,-20\n')
+    cli=build_cli(lambda *args:pytest.fail('Plot must not create a training job'))
+    result=CliRunner().invoke(cli,['plot','--workdir',str(tmp_path)])
+    assert result.exit_code==0,result.output
+    assert (tmp_path/'plots/test-results.png').is_file()
+    stats=json.loads((tmp_path/'plots/test-statistics.json').read_text())
+    assert stats['n']==1
+    assert stats['mae_kcal_mol']==pytest.approx(6.27509474)
+    result=CliRunner().invoke(cli,['plot','--workdir',str(tmp_path)])
+    assert result.exit_code!=0 and 'already exist' in result.output

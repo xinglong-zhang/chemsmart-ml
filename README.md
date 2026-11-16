@@ -118,3 +118,23 @@ The intended CHEMSMART integration base is the `plugin` branch. Its local
 checkout above successfully discovers `run ml` with the YAML-enabled CLI.
 Previous full-data training used the older integration host; scheduler execution
 and full training on this exact plugin branch remain separate validation steps.
+
+## Plot saved training results
+
+Install optional plotting support with `python -m pip install -e '.[plot]'`.
+On the plugin-capable host:
+
+```sh
+chemsmart run ml plot --workdir ./runs/energy-linear
+chemsmart run ml plot --workdir ./runs/energy-linear --split valid -o ./validation-plots
+```
+
+This local command requires only samples.csv, not the original databases. It
+exports a three-panel PNG and PDF (prediction/reference, error histogram,
+error/reference energy), plus JSON statistics (MAE, RMSE, bias, 95th percentile
+absolute error). Default split is test; train and valid are selectable. Default
+output is WORKDIR/plots. Existing output files are protected against overwrite.
+`sub ml plot` is rejected because plotting runs locally. The standalone command
+`chemsmart-ml plot` exposes the same behavior. No learning curve is available for
+the closed-form linear models. Total-energy agreement should be assessed with
+the residual panels, since a broad absolute-energy range can obscure errors.

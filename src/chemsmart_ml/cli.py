@@ -43,7 +43,7 @@ def build_cli(dispatch):
         data = config.get('data', {})
         filename = filename if filename is not None else data.get('filename')
         reference = reference if reference is not None else data.get('reference')
-        if filename is None:
+        if filename is None and ctx.invoked_subcommand != 'plot':
             raise click.UsageError('Provide -f/--filename or data.filename in YAML')
         for value in (filename, reference):
             if value is not None and not Path(value).is_file():
@@ -76,6 +76,25 @@ def build_cli(dispatch):
         if ctx.obj['ml_input']['reference']:
             raise click.UsageError('Prediction does not accept a reference database')
         return dispatch('predict',dict(filename=ctx.obj['ml_input']['filename'],model_path=model_path,output=output))
+    @main.command()
+    @click.option('--workdir', required=True, type=click.Path(exists=True,file_okay=False,resolve_path=True))
+    @click.option('--split', type=click.Choice(['train','valid','test']), default='test',show_default=True)
+    @click.option('-o','--output', type=click.Path(resolve_path=True))
+    @click.pass_context
+    def plot(ctx,workdir,split,output):
+        """Plot saved predictions locally; no databases or retraining required."""
+        parent = ctx.parent
+        while parent:
+            if parent.info_name == 'sub':
+                raise click.UsageError('Plot is local; use chemsmart run ml plot')
+            parent = parent.parent
+        from .plotting import plot_results
+        try:
+            result = plot_results(workdir,split,output)
+        except (ValueError,OSError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps(result,indent=2))
+        return None
     return main
 
 
