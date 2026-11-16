@@ -334,3 +334,32 @@ uses the recorded feature settings and does not need scikit-learn. Each model
 uses the same fixed molecule-grouped split, regardless of model selection.
 Tree and SOAP accuracy on the full scientific dataset has not yet been measured;
 start with the Stage 3 comparison, fixed split and validation metrics.
+
+## MLP and kernel ridge
+
+Install `chemsmart-ml[nonlinear]` to use scikit-learn. Both models use the same
+standardized molecular descriptors and an unregularized composition/energy
+baseline; the nonlinear estimator learns the residual. They are delta-energy
+models, not ML interatomic potentials. Their trained parameters are exported
+as JSON rather than executable pickles. MLP's two ReLU hidden layers use
+`--hidden-size` (default 128), `--learning-rate` (MLP default 0.001), and
+`--max-iter` (default 100); convergence should be assessed on the fixed
+validation split. MLP does not currently implement validation early stopping.
+
+```sh
+chemsmart run ml -p compare-stage4 train --model mlp -o ./runs/soap-mlp
+chemsmart run ml -p compare-stage4 train --model kernel-ridge --kernel-subsample --kernel-max-samples 2000 -o ./runs/soap-krr
+```
+
+Kernel ridge uses an RBF kernel with `--kernel-alpha` (default 0.001) and
+`--kernel-gamma` (default 0.01). Kernel memory grows quadratically with
+training sample count; for safety it refuses more than `--kernel-max-samples`
+(default 2000, maximum 10000). Explicit `--kernel-subsample` selects that many
+training rows reproducibly with the seed; unselected training rows are marked
+`unused` in samples.csv. Validation and test samples remain unchanged. This
+means kernel training uses fewer samples and is not a same-training-size
+comparison. SOAP/Morgan features must fit memory even when KRR is subsampled.
+
+SchNet and MACE are not yet implemented by this plugin. They require dedicated
+atomic-geometry model training and inference rather than reusing the table-only
+model adapters. Do not treat a table model as an implementation of either.

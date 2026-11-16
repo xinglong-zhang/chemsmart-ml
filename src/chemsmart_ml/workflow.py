@@ -36,8 +36,8 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True, train_fraction=0.8, valid_fraction=0.1, test_fraction=0.1, descriptor="none", soap_r_cut=5.0, soap_n_max=2, soap_l_max=2, soap_sigma=0.5, soap_aggregation="sum", soap_cache=None, max_iter=100, learning_rate=0.1, max_leaf_nodes=31):
-    if model not in ("linear", "ridge", "hist-gradient-boosting") or not np.isfinite(alpha) or alpha < 0:
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None, plot=True, train_fraction=0.8, valid_fraction=0.1, test_fraction=0.1, descriptor="none", soap_r_cut=5.0, soap_n_max=2, soap_l_max=2, soap_sigma=0.5, soap_aggregation="sum", soap_cache=None, max_iter=100, learning_rate=0.1, max_leaf_nodes=31, hidden_size=128, kernel_alpha=0.001, kernel_gamma=0.01, kernel_max_samples=2000, kernel_subsample=False):
+    if model not in ("linear", "ridge", "hist-gradient-boosting", "mlp", "kernel-ridge") or not np.isfinite(alpha) or alpha < 0:
         raise ValueError("Invalid model or regularization strength")
     fractions=np.array([train_fraction,valid_fraction,test_fraction],dtype=float)
     if not np.isfinite(fractions).all() or (fractions<=0).any() or not np.isclose(fractions.sum(),1.0,rtol=0,atol=1e-9):
@@ -106,15 +106,31 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     for group in [group_by_index[key] for key,_,_ in pairs]:
         h = int(hashlib.sha256(f"{seed}:{group}".encode()).hexdigest()[:12],16)/16**12
         labels.append("train" if h<train_fraction else "valid" if h<(train_fraction+valid_fraction) else "test")
-    labels = np.array(labels)
+    labels = np.array(labels, dtype="<U6")
     if any(not (labels==s).any() for s in ("train","valid","test")):
         raise ValueError("Empty split; need more independent molecular groups")
+    if model_name == 'kernel-ridge' and kernel_subsample:
+        candidates=np.flatnonzero(labels=='train')
+        if len(candidates)>kernel_max_samples:
+            selected=np.random.default_rng(seed).choice(candidates,size=kernel_max_samples,replace=False)
+            labels[candidates]='unused'
+            labels[selected]='train'
     mask = labels=="train"
     mean, scale = x[mask].mean(0), x[mask].std(0)
     scale[scale==0]=1
     design = np.column_stack([np.ones(len(x)), (x-mean)/scale])
     tree_model = None
-    if model_name == "hist-gradient-boosting":
+    nonlinear_model = None
+    if model_name in ("mlp", "kernel-ridge"):
+        from .regression_models import fit_nonlinear,predict_nonlinear
+        base_size=len(elements)+2
+        base_coef=np.linalg.lstsq(design[mask,:base_size],(target-low)[mask],rcond=None)[0]
+        residual=(target-low)[mask]-design[mask,:base_size]@base_coef
+        nonlinear_model=fit_nonlinear(model_name,design[mask,1:],residual,seed,hidden_size,max_iter,learning_rate,kernel_alpha,kernel_gamma,kernel_max_samples)
+        nonlinear_model['base_coefficients']=base_coef.tolist()
+        nonlinear_model['kernel_subsample']=bool(kernel_subsample) if model_name=='kernel-ridge' else None
+        correction=design[:,:base_size]@base_coef+predict_nonlinear(design[:,1:],nonlinear_model)
+    elif model_name == "hist-gradient-boosting":
         from .tree_model import fit_tree,predict_tree
         # Retain an unregularized composition/energy baseline to remove the
         # extensive elemental offset before learning nonlinear corrections.
@@ -139,12 +155,12 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
         coef = np.linalg.solve(gram,rhs)
     else:
         coef = np.linalg.lstsq(design[mask], (target-low)[mask], rcond=None)[0]
-    if tree_model is None:
+    if tree_model is None and nonlinear_model is None:
         correction=design@coef
     pred = low + correction
-    model = dict(format_version=1, model=model_name+"-delta", alpha=alpha if tree_model is None else None, target="total_energy", unit="Hartree",
+    model = dict(format_version=1, model=model_name+"-delta", alpha=alpha if tree_model is None and nonlinear_model is None else None, target="total_energy", unit="Hartree",
                  elements=elements, electronic=electronic, fingerprint=fingerprint_settings, mean=mean.tolist(), scale=scale.tolist(),
-                 coefficients=coef.tolist() if tree_model is None else None, tree=tree_model, soap=soap_settings, split=dict(train=train_fraction,valid=valid_fraction,test=test_fraction), seed=seed, plot=plot,
+                 coefficients=coef.tolist() if tree_model is None and nonlinear_model is None else None, tree=tree_model, nonlinear=nonlinear_model, soap=soap_settings, split=dict(train=train_fraction,valid=valid_fraction,test=test_fraction), seed=seed, plot=plot,
                  source=str(Path(filename).resolve()), reference=str(Path(reference).resolve()))
     (out/"model.json").write_text(json.dumps(model,indent=2))
     metrics = {s:dict(n=int((labels==s).sum()),mae_hartree=float(np.abs(pred[labels==s]-target[labels==s]).mean())) for s in ("train","valid","test")}
@@ -161,7 +177,7 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
 
 def predict(filename, model_path, output):
     model=json.loads(Path(model_path).read_text())
-    if model.get("format_version")!=1 or model.get("model") not in ("linear-delta", "ridge-delta", "hist-gradient-boosting-delta"):
+    if model.get("format_version")!=1 or model.get("model") not in ("linear-delta", "ridge-delta", "hist-gradient-boosting-delta", "mlp-delta", "kernel-ridge-delta"):
         raise ValueError("Unsupported model format")
     settings = model.get('fingerprint')
     soap_settings=model.get('soap')
@@ -186,7 +202,11 @@ def predict(filename, model_path, output):
             if soap_vectors is not None:
                 x=np.column_stack([x,soap_vectors[start:start+len(batch)]])
             design=np.column_stack([np.ones(len(batch)),(x-model["mean"])/model["scale"]])
-            if model['model']=='hist-gradient-boosting-delta':
+            if model['model'] in ('mlp-delta','kernel-ridge-delta'):
+                from .regression_models import predict_nonlinear
+                nonlinear=model['nonlinear'];coef=nonlinear['base_coefficients']
+                correction=design[:,:len(coef)]@coef+predict_nonlinear(design[:,1:],nonlinear)
+            elif model['model']=='hist-gradient-boosting-delta':
                 from .tree_model import predict_tree
                 tree=model['tree'];coef=tree['base_coefficients']
                 correction=design[:,:len(coef)]@coef+predict_tree(design[:,1:],tree)
