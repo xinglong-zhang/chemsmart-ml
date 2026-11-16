@@ -210,3 +210,31 @@ retained for inspection; choose a new output directory when retrying.
 
 SOAP is not yet connected to this plugin. Morgan produces 2D connectivity
 features and does not encode the final geometry's distances or angles.
+
+## Screen an entire paired dataset before Morgan training
+
+```sh
+chemsmart run ml -p energy-morgan validate --pairing revqm9-index --features orbitals --fingerprint morgan -o /path/validation
+chemsmart run ml -p energy-morgan prepare --manifest /path/validation/valid-samples.json -o /path/prepared-valid
+chemsmart run ml -p energy-morgan train --manifest /path/validation/valid-samples.json -o /path/trained-valid
+```
+
+Validation continues past invalid SMILES and collects all failures. It writes
+validation.json, excluded.csv (one-based idx and zero-based npz_index, record IDs,
+SMILES and reasons), and valid-samples.json. Required numeric inputs and target
+energies must be finite; paired compositions must match. Unmatched source or
+reference indices are listed separately in the pairing report. Parsing checks
+are task-specific: use --fingerprint none for numerical-feature-only validation.
+This is not a full coordinate, convergence or chemical-correctness audit, and
+statistical energy outliers are not automatically removed.
+
+Exclusion is explicit: prepare/train only filter when --manifest is supplied.
+Both accept a YAML manifest path in their respective sections. validate accepts
+pairing/features/fingerprint/output in its own YAML section. Databases remain
+unchanged. The manifest is tied to absolute source/reference paths, sizes and
+modification timestamps; rerun validation if inputs change. This lightweight
+identity check is not a cryptographic content hash. Training copies the manifest
+to its output, checks sample record IDs and preserves grouping based on the full
+paired set before filtering. For a fair feature comparison, train numerical and
+Morgan baselines with the same manifest rather than compare different cohorts.
+Previously failed output directories remain intact; always choose new outputs.

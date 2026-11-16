@@ -36,15 +36,30 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None):
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0, fingerprint="none", morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None):
     if model not in ("linear", "ridge") or not np.isfinite(alpha) or alpha < 0:
         raise ValueError("Invalid model or regularization strength")
     model_name = model
     out = Path(output)
     out.mkdir(parents=True, exist_ok=False)
     pairs, report = pair(read_database(filename,"source", include_smiles=fingerprint=="morgan"), read_database(reference,"reference"))
+    group_by_index = dict(zip([key for key,_,_ in pairs],groups(pairs)))
+    if manifest:
+        from .validation import load_manifest
+        selection=load_manifest(manifest,filename,reference)
+        (out/'validation-manifest.json').write_text(json.dumps(selection,indent=2))
+        selected={item['npz_index']:item for item in selection['samples']}
+        for key,a,b in pairs:
+            if key in selected and (a['record_id']!=selected[key]['source_record'] or b['record_id']!=selected[key]['reference_record']):
+                raise ValueError('Sample IDs differ from validation manifest')
+        pairs=[row for row in pairs if row[0] in selected]
+        if len(pairs)!=len(selected):
+            raise ValueError('Validation manifest contains unmatched samples')
+        report['selected']=len(pairs)
+        report['validation_manifest']=str(Path(manifest).resolve())
+        report['excluded_by_manifest']=report['matched']-len(pairs)
     (out/"pairing.json").write_text(json.dumps(report, indent=2))
-    if report["rejected"]:
+    if report["rejected"] and not manifest:
         raise ValueError("Pairing rejected composition mismatches; inspect pairing.json and establish a verified index mapping before training")
     if len(pairs)<10:
         raise ValueError("Need at least 10 paired samples")
@@ -71,7 +86,7 @@ def train(filename, reference, output, seed=42, electronic=False, model="linear"
     if not np.isfinite(target).all():
         raise ValueError("Invalid reference energies")
     labels = []
-    for group in groups(pairs):
+    for group in [group_by_index[key] for key,_,_ in pairs]:
         h = int(hashlib.sha256(f"{seed}:{group}".encode()).hexdigest()[:12],16)/16**12
         labels.append("train" if h<0.8 else "valid" if h<0.9 else "test")
     labels = np.array(labels)
@@ -133,13 +148,20 @@ def predict(filename, model_path, output):
     return dict(samples=len(rows),output=str(output))
 
 
-def prepare(filename, output, morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None):
+def prepare(filename, output, morgan_radius=2, morgan_size=2048, morgan_chirality=False, cache=None, manifest=None):
     """Populate reusable Morgan cache without labels, splitting or training."""
     from .fingerprints import morgan_config, cached_morgan
     out = Path(output)
     out.mkdir(parents=True,exist_ok=False)
     settings = morgan_config(morgan_radius,morgan_size,morgan_chirality)
     rows = read_database(filename,'source',include_smiles=True)
+    if manifest:
+        from .validation import load_manifest
+        selection=load_manifest(manifest,filename)
+        selected={item['npz_index']:item for item in selection['samples']}
+        rows={key:row for key,row in rows.items() if key in selected}
+        if len(rows)!=len(selected) or any(row['record_id']!=selected[key]['source_record'] for key,row in rows.items()):
+            raise ValueError('Source sample IDs differ from manifest')
     try:
         _, report = cached_morgan(list(rows.values()),settings,cache)
     except ValueError as exc:
@@ -147,3 +169,8 @@ def prepare(filename, output, morgan_radius=2, morgan_size=2048, morgan_chiralit
         raise
     (out/'fingerprints.json').write_text(json.dumps(report,indent=2))
     return report
+
+
+def validate(**options):
+    from .validation import validate as validate_database
+    return validate_database(**options)

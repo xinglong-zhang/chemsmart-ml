@@ -21,7 +21,7 @@ def read_database(path, role, include_smiles=False):
         """
         if include_smiles:
             query = query.replace('rs.dipole_moment_magnitude\n', 'rs.dipole_moment_magnitude, m.smiles\n')
-            query = query.replace('WHERE rs.index_in_record=', 'JOIN molecules m ON m.molecule_id=s.molecule_id WHERE rs.index_in_record=')
+            query = query.replace('WHERE rs.index_in_record=', 'LEFT JOIN molecules m ON m.molecule_id=s.molecule_id WHERE rs.index_in_record=')
         rows = {}
         for record in db.execute(query):
             rid, source, energy, homo, lumo, mid, symbols, index, dipole = record[:9]
