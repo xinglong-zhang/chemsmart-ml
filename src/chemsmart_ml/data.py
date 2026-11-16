@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def read_database(path, role):
-    """Explicit revQM9 convention: source idx is one-based; NPZ inds is zero-based."""
+    """Explicit revQM9 convention: source idx is one-based; NPZ structure_index_in_file is one-based."""
     uri = Path(path).resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as db:
         # Use only the last structure per calculation. Never expand trajectories.
@@ -27,10 +27,9 @@ def read_database(path, role):
                     raise ValueError(f"Cannot extract source idx from {source!r}")
                 key = int(match.group(1)) - 1
             else:
-                prop = db.execute("SELECT properties_json FROM dataset_properties WHERE record_id=?", (rid,)).fetchall()
-                if len(prop) != 1:
-                    raise ValueError(f"Expected one dataset property row: {rid}")
-                key = int(json.loads(prop[0][0])["inds"]["value"])
+                if index is None or index < 1:
+                    raise ValueError(f"Missing one-based NPZ structure position: {rid}")
+                key = int(index) - 1
             if key in rows:
                 raise ValueError(f"Duplicate sample index {key} in {path}")
             atoms = json.loads(symbols)

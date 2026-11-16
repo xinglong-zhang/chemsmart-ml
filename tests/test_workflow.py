@@ -18,8 +18,8 @@ def database(path, reference=False):
         energy=-10-i*.1
         db.execute('INSERT INTO records VALUES(?,?,?,?,?)',(str(i),f'/opt_idx{i+1}',energy*1.2+3 if reference else energy,-1,1))
         db.execute('INSERT INTO structures VALUES(?,?,?)',(str(i),f'm{i}',json.dumps(['C','H'])))
-        db.execute('INSERT INTO record_structures VALUES(?,?,?,?,?)',(str(i),str(i),1,i,0.5))
-        db.execute('INSERT INTO dataset_properties VALUES(?,?)',(str(i),json.dumps({'inds':{'value':i}})))
+        db.execute('INSERT INTO record_structures VALUES(?,?,?,?,?)',(str(i),str(i),1,i+1,0.5))
+        db.execute('INSERT INTO dataset_properties VALUES(?,?)',(str(i),json.dumps({'inds':{'value':i+1000}})))
     db.commit();db.close()
 
 

@@ -17,7 +17,7 @@ def build_cli(dispatch):
     @click.option('--target',type=click.Choice(['energy']),default='energy')
     @click.option('--learning',type=click.Choice(['delta']),default='delta')
     @click.option('--pairing',type=click.Choice(['revqm9-index']),required=True,
-                  help='xTB idx=N matches NPZ inds=N-1. Both inputs must share this dataset ordering.')
+                  help='xTB idx=N matches NPZ structure_index_in_file=N. Both inputs must share this dataset ordering.')
     @click.option('--features',type=click.Choice(['composition-energy','electronic']),default='composition-energy')
     @click.option('--seed',default=42,type=int)
     @click.option('-o','--output',required=True,type=click.Path(resolve_path=True))

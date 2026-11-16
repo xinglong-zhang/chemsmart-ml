@@ -33,7 +33,7 @@ use persistent paths, with scratch disabled.
 
 This version supports CHEMSMART databases using the explicit `revqm9-index`
 convention: source paths contain `idxN` (one-based), reference
-`dataset_properties.properties_json.inds.value` is N-1 (zero-based). The two
+`record_structures.structure_index_in_file` is N (one-based). The two
 files MUST derive from the same NPZ ordering. This rule is not a general-purpose
 identity matcher. No row-order or InChIKey matching fallback is used.
 
@@ -78,10 +78,10 @@ Tests cover zero/one-based pairing, duplicate rejection, element mismatches,
 transitive leakage grouping, exact recovery of a synthetic delta relationship,
 and model prediction round-trip. Real database training is a separate check.
 
-## Local real-data check
+## Previous pairing bug
 
-The supplied all_revQM9.db and revQM9.db did NOT pass the proposed index
-matching convention: many composition mismatches occurred. Do not use this
-convention on those files until the source index provenance is established.
+The first implementation incorrectly used NPZ inds as array positions. These
+fields diverge starting at position 20001 in the supplied data. Pairing now uses
+the stored one-based structure_index_in_file, independently of inds.
 The plugin stops training when composition mismatches are present. Matching
 composition alone is necessary but does not establish molecular identity.
