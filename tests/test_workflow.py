@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import sqlite3
 import numpy as np
 import pytest
@@ -160,3 +161,29 @@ def test_train_automatic_plot_and_opt_out(tmp_path):
     result=CliRunner().invoke(cli,['-f',str(a),'-r',str(b),'train','--pairing','revqm9-index','--no-plot','-o',str(tmp_path/'no-plot')])
     assert result.exit_code==0,result.output
     assert not (tmp_path/'no-plot/plots').exists()
+
+
+def test_default_output_is_invocation_directory(tmp_path,monkeypatch):
+    from click.testing import CliRunner
+    from chemsmart_ml.cli import build_cli
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    presets=tmp_path/'presets';presets.mkdir()
+    cfg=presets/'test.yaml'
+    cfg.write_text('train:\n  pairing: revqm9-index\n')
+    working=tmp_path/'working';working.mkdir()
+    monkeypatch.chdir(working)
+    calls=[]
+    cli=build_cli(lambda action,options:calls.append(options))
+    runner=CliRunner()
+    args=['-p',str(cfg),'-f',str(a),'-r',str(b),'train']
+    result=runner.invoke(cli,args)
+    assert result.exit_code==0,result.output
+    first=Path(calls[-1]['output'])
+    assert first.parent==working and first.name.startswith('ml-train-')
+    result=runner.invoke(cli,args)
+    assert result.exit_code==0,result.output
+    assert calls[-1]['output']!=str(first)
+    result=runner.invoke(cli,args+['-o','chosen'])
+    assert result.exit_code==0,result.output
+    assert calls[-1]['output']==str(working/'chosen')

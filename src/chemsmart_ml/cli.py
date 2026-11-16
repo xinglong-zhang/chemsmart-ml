@@ -1,5 +1,6 @@
 """Standalone and host-shareable command definitions."""
 import json
+import uuid
 from pathlib import Path
 import yaml
 from .projects import resolve_project, complete_project
@@ -71,7 +72,7 @@ def build_cli(dispatch):
     @click.option('--manifest',type=click.Path(exists=True,resolve_path=True))
     @click.option('--cache',type=click.Path(resolve_path=True))
     @click.option('--seed',default=42,type=int)
-    @click.option('-o','--output',required=True,type=click.Path(resolve_path=True))
+    @click.option('-o','--output',default=lambda: str(Path.cwd()/('ml-train-'+uuid.uuid4().hex[:8])),type=click.Path(resolve_path=True),help='Output directory; defaults to a new ml-train-* directory under the working directory.')
     @click.pass_context
     def train(ctx,target,learning,pairing,features,model,alpha,seed,output,fingerprint,morgan_radius,morgan_size,morgan_chirality,cache,manifest,plot):
         options=dict(ctx.obj['ml_input'])
@@ -143,6 +144,8 @@ def execute(action,options):
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(json.dumps(result,indent=2))
+    if action == "train":
+        click.echo(f"Results: {options['output']}", err=True)
     return result
 
 main=build_cli(execute)

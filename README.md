@@ -247,3 +247,25 @@ out. `train --plot` overrides YAML false. The independent plot command remains
 available for older runs or other splits. Automatic plotting uses a headless
 backend and does not open a window. Metrics and model artifacts are written
 before plotting; if plotting fails, those artifacts remain available.
+
+## Minimal user template and default output
+
+Copy examples/test.yaml to ~/.chemsmart/ml/test.yaml (or the corresponding
+CHEMSMART_CONFIG_DIR/ml directory). It contains no personal database paths:
+
+```sh
+chemsmart run ml -p test -f xtb.db -r dft.db train
+chemsmart run ml -p test -f xtb.db -r dft.db train --model ridge --alpha 0.000001 -o ./experiment
+```
+
+When train.output and -o are both omitted, training creates a new ml-train-*
+subdirectory under the invocation working directory, not the YAML directory.
+The unique suffix preserves earlier runs; the resolved output path is printed
+after training. Model, metrics, sample predictions and default plots live there.
+Explicit YAML relative output paths retain their existing YAML-relative behavior;
+explicit CLI -o paths are relative to the working directory.
+
+The template starts with the lightweight linear/composition-energy baseline.
+Its optional ridge alpha is an initial candidate, not a universal optimum.
+Current pairing support remains revqm9-index: arbitrary unrelated database
+formats or numbering conventions are not automatically matched.

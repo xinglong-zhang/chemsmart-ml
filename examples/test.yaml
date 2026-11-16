@@ -1,0 +1,29 @@
+# 通用训练入门模板：运行时用 -f 和 -r 指定数据库，不绑定个人路径。
+# chemsmart run ml -p test -f xtb.db -r dft.db train
+# 当前仅支持 revQM9 编号约定，不是任意两个数据库的通用匹配器。
+# xTB 来源文件名 idxN 对应参考库 structure_index_in_file=N。
+train:
+  target: energy
+  learning: delta
+  pairing: revqm9-index
+
+  # 输入：composition-energy / orbitals / electronic
+  # orbitals 加入 HOMO、LUMO；electronic 还要求偶极矩完整。
+  features: composition-energy
+  fingerprint: none       # none / morgan
+
+  model: linear           # linear / ridge
+  alpha: 0.000001          # 仅 ridge 生效；只是起点，最佳值应按验证集选择。
+  seed: 42
+  plot: true
+
+  # 不写 output：默认在运行命令的当前目录新建 ml-train-随机编号/。
+  # output: /path/to/new-output
+
+  # 需要使用检查通过的样本时，取消注释并填写清单路径：
+  # manifest: /path/to/validation/valid-samples.json
+
+  # fingerprint: morgan 时可选；以下注释值为 CLI 默认值：
+  # morgan_radius: 2
+  # morgan_size: 2048
+  # morgan_chirality: false
