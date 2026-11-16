@@ -33,7 +33,10 @@ def groups(pairs):
     return [root(a["molecule_id"]) for _,a,_ in pairs]
 
 
-def train(filename, reference, output, seed=42, electronic=False):
+def train(filename, reference, output, seed=42, electronic=False, model="linear", alpha=1.0):
+    if model not in ("linear", "ridge") or not np.isfinite(alpha) or alpha < 0:
+        raise ValueError("Invalid model or regularization strength")
+    model_name = model
     out = Path(output)
     out.mkdir(parents=True, exist_ok=False)
     pairs, report = pair(read_database(filename,"source"), read_database(reference,"reference"))
@@ -59,9 +62,15 @@ def train(filename, reference, output, seed=42, electronic=False):
     mean, scale = x[mask].mean(0), x[mask].std(0)
     scale[scale==0]=1
     design = np.column_stack([np.ones(len(x)), (x-mean)/scale])
-    coef = np.linalg.lstsq(design[mask], (target-low)[mask], rcond=None)[0]
+    a, b = design[mask], (target-low)[mask]
+    if model_name == "ridge":
+        penalty = np.eye(a.shape[1]) * np.sqrt(alpha)
+        penalty[0,0] = 0
+        a = np.vstack([a,penalty])
+        b = np.r_[b,np.zeros(penalty.shape[0])]
+    coef = np.linalg.lstsq(a, b, rcond=None)[0]
     pred = low + design@coef
-    model = dict(format_version=1, model="linear-delta", target="total_energy", unit="Hartree",
+    model = dict(format_version=1, model=model_name+"-delta", alpha=alpha, target="total_energy", unit="Hartree",
                  elements=elements, electronic=electronic, mean=mean.tolist(), scale=scale.tolist(),
                  coefficients=coef.tolist(), seed=seed,
                  source=str(Path(filename).resolve()), reference=str(Path(reference).resolve()))
@@ -77,7 +86,7 @@ def train(filename, reference, output, seed=42, electronic=False):
 
 def predict(filename, model_path, output):
     model=json.loads(Path(model_path).read_text())
-    if model.get("format_version")!=1 or model.get("model")!="linear-delta":
+    if model.get("format_version")!=1 or model.get("model") not in ("linear-delta", "ridge-delta"):
         raise ValueError("Unsupported model format")
     rows=read_database(filename,"source")
     with Path(output).open("x") as f:

@@ -85,3 +85,15 @@ fields diverge starting at position 20001 in the supplied data. Pairing now uses
 the stored one-based structure_index_in_file, independently of inds.
 The plugin stops training when composition mismatches are present. Matching
 composition alone is necessary but does not establish molecular identity.
+
+## Explicit model selection and development host
+
+Training accepts `--model linear` (ordinary least squares, default) or
+`--model ridge --alpha 1.0` (L2 regularization; intercept unpenalized).
+Both learn the energy delta; neither is a graph neural network.
+
+The local plugin-capable development host is `/Users/tt/chemsmart-mlip-host`.
+From outside a conflicting CHEMSMART source checkout, select that host using
+`PYTHONPATH=/Users/tt/chemsmart-mlip-host` before invoking the CHEMSMART
+executable in the chemsmart environment. This does not update the main checkout.
+Do not assume plain `chemsmart` selects that development host.

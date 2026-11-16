@@ -51,3 +51,13 @@ def test_duplicate_and_composition(tmp_path):
         read_database(a,'source')
     pairs,report=pair({0:{'atoms':['C']}},{0:{'atoms':['N']}})
     assert not pairs and len(report['rejected'])==1
+
+
+def test_ridge_roundtrip(tmp_path):
+    a,b=tmp_path/'a.db',tmp_path/'b.db'
+    database(a);database(b,True)
+    train(a,b,tmp_path/'ridge',model='ridge',alpha=0.1)
+    model=json.loads((tmp_path/'ridge/model.json').read_text())
+    assert model['model']=='ridge-delta'
+    predict(a,tmp_path/'ridge/model.json',tmp_path/'ridge.csv')
+    assert len((tmp_path/'ridge.csv').read_text().splitlines())==121
