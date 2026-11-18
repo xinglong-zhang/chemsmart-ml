@@ -23,3 +23,16 @@ ml = "chemsmart_ml.integration:ml"
 where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 79
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 79
+
+[tool.ruff]
+target-version = "py310"
+line-length = 79

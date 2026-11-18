@@ -77,6 +77,41 @@ python -m pytest
 Tests cover zero/one-based pairing, duplicate rejection, element mismatches,
 transitive leakage grouping, exact recovery of a synthetic delta relationship,
 and model prediction round-trip. Real database training is a separate check.
+Shared fixtures live in `tests/fixtures/` (registered in `tests/conftest.py`)
+and plain builders in `tests/helpers.py`.
+
+## Package layout and Python API
+
+The package follows CHEMSMART's object-oriented layout:
+
+| Module | Classes |
+| --- | --- |
+| `chemsmart_ml.io` | `SourceDatabase`, `ReferenceDatabase` (read-only readers), `MolecularRecord`, `ValidationManifest` |
+| `chemsmart_ml.dataset` | `PairedDataset` (pairing, molecular groups, manifest selection), `SamplePair`, `DataSplit` |
+| `chemsmart_ml.features` | `FeatureBuilder`, `FeatureScaler`, `CachedDescriptor` with `MorganFingerprint` and `SOAPDescriptor` |
+| `chemsmart_ml.models` | `DeltaModel` registry (`linear`, `ridge`, `hist-gradient-boosting`, `mlp`, `kernel-ridge`), portable regressors, `TrainedModel` (`model.json`) |
+| `chemsmart_ml.workflows` | `TrainingSettings`, `TrainingWorkflow`, `GroupedCrossValidation`, `PredictionWorkflow`, `FingerprintPreparation`, `DatasetValidation` |
+| `chemsmart_ml.plotting` | `PredictionResultsPlotter`, `CrossValidationPlotter` |
+| `chemsmart_ml.projects` | `ProjectConfig` |
+| `chemsmart_ml.cli` | `build_cli`, `execute`, reusable click option groups |
+
+Each CLI subcommand dispatches to the workflow registered for it, so the
+same run is available from Python:
+
+```python
+from chemsmart_ml.workflows import (
+    PredictionWorkflow,
+    TrainingSettings,
+    TrainingWorkflow,
+)
+
+settings = TrainingSettings("xtb.db", "dft.db", "runs/ridge", model="ridge")
+metrics = TrainingWorkflow(settings).run()
+PredictionWorkflow("new_xtb.db", "runs/ridge/model.json", "pred.csv").run()
+```
+
+`model.json` and the descriptor cache formats are unchanged, so models and
+caches written by earlier versions remain usable.
 
 ## Previous pairing bug
 

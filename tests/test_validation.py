@@ -1,34 +1,63 @@
-import csv
-import json
 import sqlite3
+
 import pytest
-from test_workflow import database
-from test_fingerprints import add_smiles
-from chemsmart_ml.validation import validate,load_manifest
-from chemsmart_ml.workflow import prepare,train
+
+from chemsmart_ml.io import (
+    ReferenceDatabase,
+    SourceDatabase,
+    ValidationManifest,
+)
+from chemsmart_ml.workflows import DatasetValidation, FingerprintPreparation
+from tests.helpers import read_csv, train
 
 
-def test_full_screen_manifest_prepare_train(tmp_path,monkeypatch):
-    monkeypatch.setenv('CHEMSMART_CONFIG_DIR',str(tmp_path/'config'))
-    a,b=tmp_path/'a.db',tmp_path/'b.db'
-    database(a);database(b,True);add_smiles(a)
-    with sqlite3.connect(a) as db:
-        db.execute("UPDATE molecules SET smiles='invalid!' WHERE molecule_id='m3'")
+def test_full_screen_manifest_prepare_train(
+    smiles_databases, tmp_path, config_dir
+):
+    pytest.importorskip("rdkit")
+    source, reference = smiles_databases
+    with sqlite3.connect(source) as db:
+        db.execute(
+            "UPDATE molecules SET smiles='invalid!' WHERE molecule_id='m3'"
+        )
         db.execute("UPDATE records SET homo_energy=NULL WHERE record_id='4'")
-    report=validate(a,b,tmp_path/'validation')
-    assert report['valid']==118 and report['excluded']==2
-    manifest=tmp_path/'validation/valid-samples.json'
-    excluded=list(csv.DictReader((tmp_path/'validation/excluded.csv').open()))
-    assert {int(row['idx']) for row in excluded}=={4,5}
-    prepare(a,tmp_path/'prepared',morgan_size=32,manifest=manifest)
-    train(a,b,tmp_path/'trained',electronic='orbitals',fingerprint='morgan',morgan_size=32,model='ridge',manifest=manifest)
-    rows=list(csv.DictReader((tmp_path/'trained/samples.csv').open()))
-    assert len(rows)==118 and not {'3','4'} & {r['npz_index'] for r in rows}
-    # Same filtered sample set can be used for a fair numerical baseline.
-    train(a,b,tmp_path/'baseline',electronic='orbitals',manifest=manifest)
-    base=list(csv.DictReader((tmp_path/'baseline/samples.csv').open()))
-    assert [(r['npz_index'],r['split']) for r in base]==[(r['npz_index'],r['split']) for r in rows]
-    with sqlite3.connect(a) as db:
+    report = DatasetValidation(
+        source, reference, tmp_path / "validation"
+    ).run()
+    assert report["valid"] == 118 and report["excluded"] == 2
+    manifest = tmp_path / "validation/valid-samples.json"
+    excluded = read_csv(tmp_path / "validation/excluded.csv")
+    assert {int(row["idx"]) for row in excluded} == {4, 5}
+    FingerprintPreparation.from_options(
+        source, tmp_path / "prepared", morgan_size=32, manifest=manifest
+    ).run()
+    train(
+        source,
+        reference,
+        tmp_path / "trained",
+        features="orbitals",
+        fingerprint="morgan",
+        morgan_size=32,
+        model="ridge",
+        manifest=manifest,
+    )
+    rows = read_csv(tmp_path / "trained/samples.csv")
+    assert len(rows) == 118 and not {"3", "4"} & {r["npz_index"] for r in rows}
+    # The same filtered sample set gives a fair numerical baseline.
+    train(
+        source,
+        reference,
+        tmp_path / "baseline",
+        features="orbitals",
+        manifest=manifest,
+    )
+    base = read_csv(tmp_path / "baseline/samples.csv")
+    assert [(r["npz_index"], r["split"]) for r in base] == [
+        (r["npz_index"], r["split"]) for r in rows
+    ]
+    with sqlite3.connect(source) as db:
         db.execute("UPDATE records SET homo_energy=0 WHERE record_id='4'")
-    with pytest.raises(ValueError,match='source database'):
-        load_manifest(manifest,a,b)
+    with pytest.raises(ValueError, match="source database"):
+        ValidationManifest.from_file(manifest).verify(
+            SourceDatabase(source), ReferenceDatabase(reference)
+        )
